@@ -315,7 +315,7 @@ impl EventHandler for Handler {
         tracing::info!(guild_count = ready.guilds.len(), "discord guilds available");
     }
 
-    async fn message(&self, _ctx: Context, message: Message) {
+    async fn message(&self, ctx: Context, message: Message) {
         if message.author.bot {
             return;
         }
@@ -340,7 +340,7 @@ impl EventHandler for Handler {
 
         let conversation_id = build_conversation_id(&message);
         let content = extract_content(&message);
-        let metadata = build_metadata(&message);
+        let metadata = build_metadata(&ctx, &message).await;
 
         let inbound = InboundMessage {
             id: message.id.to_string(),
@@ -392,7 +392,7 @@ fn extract_content(message: &Message) -> MessageContent {
     }
 }
 
-fn build_metadata(message: &Message) -> HashMap<String, serde_json::Value> {
+async fn build_metadata(ctx: &Context, message: &Message) -> HashMap<String, serde_json::Value> {
     let mut metadata = HashMap::new();
     metadata.insert("discord_channel_id".into(), message.channel_id.get().into());
     metadata.insert("discord_message_id".into(), message.id.get().into());
@@ -401,8 +401,33 @@ fn build_metadata(message: &Message) -> HashMap<String, serde_json::Value> {
         message.author.name.clone().into(),
     );
 
+    // Display name: member nickname > global display name > username
+    let display_name = if let Some(member) = &message.member {
+        member.nick.clone().unwrap_or_else(|| {
+            message.author.global_name.clone()
+                .unwrap_or_else(|| message.author.name.clone())
+        })
+    } else {
+        message.author.global_name.clone()
+            .unwrap_or_else(|| message.author.name.clone())
+    };
+    metadata.insert("sender_display_name".into(), display_name.into());
+    metadata.insert("sender_id".into(), message.author.id.get().into());
+
     if let Some(guild_id) = message.guild_id {
         metadata.insert("discord_guild_id".into(), guild_id.get().into());
+
+        // Try to get guild name
+        if let Ok(guild) = guild_id.to_partial_guild(&ctx.http).await {
+            metadata.insert("discord_guild_name".into(), guild.name.into());
+        }
+    }
+
+    // Try to get channel name
+    if let Ok(channel) = message.channel_id.to_channel(&ctx.http).await {
+        if let Some(guild_channel) = channel.guild() {
+            metadata.insert("discord_channel_name".into(), guild_channel.name.clone().into());
+        }
     }
 
     metadata

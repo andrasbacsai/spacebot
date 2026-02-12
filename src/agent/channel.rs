@@ -74,10 +74,12 @@ pub struct Channel {
     pub event_rx: broadcast::Receiver<ProcessEvent>,
     /// Outbound response sender for the messaging layer.
     pub response_tx: mpsc::Sender<OutboundResponse>,
-    /// Self-sender for re-triggering the LLM after worker/branch completion.
+    /// Self-sender for re-triggering the channel after background process completion.
     pub self_tx: mpsc::Sender<InboundMessage>,
-    /// Conversation ID used for synthetic messages.
+    /// Conversation ID from the first message (for synthetic re-trigger messages).
     pub conversation_id: Option<String>,
+    /// Conversation context (platform, channel name, server) captured from the first message.
+    pub conversation_context: Option<String>,
 }
 
 impl Channel {
@@ -128,6 +130,7 @@ impl Channel {
             response_tx,
             self_tx,
             conversation_id: None,
+            conversation_context: None,
         };
         
         (channel, message_tx)
@@ -174,12 +177,20 @@ impl Channel {
             self.conversation_id = Some(message.conversation_id.clone());
         }
         
-        let user_text = match &message.content {
+        let raw_text = match &message.content {
             crate::MessageContent::Text(text) => text.clone(),
             crate::MessageContent::Media { text, .. } => text.clone().unwrap_or_default(),
         };
 
-        // Build the system prompt with identity and status block
+        // Format the user text with sender attribution so the LLM knows who's talking
+        let user_text = format_user_message(&raw_text, &message);
+
+        // Capture conversation context from the first message (platform, channel, server)
+        if self.conversation_context.is_none() {
+            self.conversation_context = Some(build_conversation_context(&message));
+        }
+
+        // Build the system prompt: identity + channel prompt + conversation context + status
         let status_text = {
             let status = self.state.status_block.read().await;
             status.render()
@@ -190,6 +201,10 @@ impl Channel {
             system_prompt.push_str("\n\n");
         }
         system_prompt.push_str(&self.system_prompt);
+        if let Some(context) = &self.conversation_context {
+            system_prompt.push_str("\n\n## Conversation Context\n\n");
+            system_prompt.push_str(context);
+        }
         if !status_text.is_empty() {
             system_prompt.push_str("\n\n## Current Status\n\n");
             system_prompt.push_str(&status_text);
@@ -455,4 +470,43 @@ pub async fn spawn_worker_from_state(
     tracing::info!(worker_id = %worker_id, task = %task, "worker spawned");
     
     Ok(worker_id)
+}
+
+/// Format a user message with sender attribution from message metadata.
+///
+/// In multi-user channels, this lets the LLM distinguish who said what.
+/// System-generated messages (re-triggers) are passed through as-is.
+fn format_user_message(raw_text: &str, message: &InboundMessage) -> String {
+    if message.source == "system" {
+        return raw_text.to_string();
+    }
+
+    let display_name = message.metadata
+        .get("sender_display_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&message.sender_id);
+
+    format!("[{display_name}]: {raw_text}")
+}
+
+/// Build conversation context string from the first message's metadata.
+///
+/// Injected into the system prompt so the LLM knows what platform and
+/// channel it's operating in.
+fn build_conversation_context(message: &InboundMessage) -> String {
+    let mut lines = Vec::new();
+
+    lines.push(format!("Platform: {}", message.source));
+
+    if let Some(guild_name) = message.metadata.get("discord_guild_name").and_then(|v| v.as_str()) {
+        lines.push(format!("Server: {guild_name}"));
+    }
+
+    if let Some(channel_name) = message.metadata.get("discord_channel_name").and_then(|v| v.as_str()) {
+        lines.push(format!("Channel: #{channel_name}"));
+    }
+
+    lines.push("Multiple users may be present. Each message is prefixed with [username].".into());
+
+    lines.join("\n")
 }
