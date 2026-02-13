@@ -13,47 +13,57 @@ interface ChannelDetailProps {
 	liveState: ChannelLiveState | undefined;
 }
 
-function WorkerDetail({ worker }: { worker: ActiveWorker }) {
+function LiveBranchRunItem({ item, live }: { item: TimelineBranchRun; live: ActiveBranch }) {
+	const displayTool = live.currentTool ?? live.lastTool;
 	return (
-		<div className="flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-sm">
-			<div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+		<div className="flex gap-3 px-3 py-2">
+			<span className="flex-shrink-0 pt-0.5 text-tiny text-ink-faint">
+				{formatTimestamp(new Date(item.started_at).getTime())}
+			</span>
 			<div className="min-w-0 flex-1">
-				<div className="flex items-center gap-2">
-					<span className="font-medium text-amber-300">Worker</span>
-					<span className="text-ink-dull">{worker.task}</span>
-				</div>
-				<div className="mt-1 flex items-center gap-3 text-tiny text-ink-faint">
-					<span>{worker.status}</span>
-					{worker.currentTool && (
-						<span className="text-amber-400/70">{worker.currentTool}</span>
-					)}
-					{worker.toolCalls > 0 && (
-						<span>{worker.toolCalls} tool calls</span>
-					)}
+				<div className="rounded-md bg-violet-500/10 px-3 py-2">
+					<div className="flex items-center gap-2">
+						<div className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
+						<span className="text-sm font-medium text-violet-300">Branch</span>
+						<span className="truncate text-sm text-ink-dull">{item.description}</span>
+					</div>
+					<div className="mt-1 flex items-center gap-3 pl-4 text-tiny text-ink-faint">
+						<LiveDuration startMs={live.startedAt} />
+						{displayTool && (
+							<span className={live.currentTool ? "text-violet-400/70" : "text-violet-400/40"}>{displayTool}</span>
+						)}
+						{live.toolCalls > 0 && (
+							<span>{live.toolCalls} tool calls</span>
+						)}
+					</div>
 				</div>
 			</div>
 		</div>
 	);
 }
 
-function BranchDetail({ branch }: { branch: ActiveBranch }) {
-	const displayTool = branch.currentTool ?? branch.lastTool;
+function LiveWorkerRunItem({ item, live }: { item: TimelineWorkerRun; live: ActiveWorker }) {
 	return (
-		<div className="flex items-center gap-2 rounded-md bg-violet-500/10 px-3 py-2 text-sm">
-			<div className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
+		<div className="flex gap-3 px-3 py-2">
+			<span className="flex-shrink-0 pt-0.5 text-tiny text-ink-faint">
+				{formatTimestamp(new Date(item.started_at).getTime())}
+			</span>
 			<div className="min-w-0 flex-1">
-				<div className="flex items-center gap-2">
-					<span className="font-medium text-violet-300">Branch</span>
-					<span className="text-ink-dull">{branch.description}</span>
-				</div>
-				<div className="mt-1 flex items-center gap-3 text-tiny text-ink-faint">
-					<LiveDuration startMs={branch.startedAt} />
-					{displayTool && (
-						<span className={branch.currentTool ? "text-violet-400/70" : "text-violet-400/40"}>{displayTool}</span>
-					)}
-					{branch.toolCalls > 0 && (
-						<span>{branch.toolCalls} tool calls</span>
-					)}
+				<div className="rounded-md bg-amber-500/10 px-3 py-2">
+					<div className="flex items-center gap-2">
+						<div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+						<span className="text-sm font-medium text-amber-300">Worker</span>
+						<span className="truncate text-sm text-ink-dull">{item.task}</span>
+					</div>
+					<div className="mt-1 flex items-center gap-3 pl-4 text-tiny text-ink-faint">
+						<span>{live.status}</span>
+						{live.currentTool && (
+							<span className="text-amber-400/70">{live.currentTool}</span>
+						)}
+						{live.toolCalls > 0 && (
+							<span>{live.toolCalls} tool calls</span>
+						)}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -62,7 +72,6 @@ function BranchDetail({ branch }: { branch: ActiveBranch }) {
 
 function BranchRunItem({ item }: { item: TimelineBranchRun }) {
 	const [expanded, setExpanded] = useState(false);
-	const isRunning = !item.completed_at;
 
 	return (
 		<div className="flex gap-3 px-3 py-2">
@@ -73,23 +82,18 @@ function BranchRunItem({ item }: { item: TimelineBranchRun }) {
 				<button
 					type="button"
 					onClick={() => setExpanded(!expanded)}
-					className="flex w-full items-center gap-2 rounded-md bg-violet-500/10 px-3 py-2 text-left transition-colors hover:bg-violet-500/15"
+					className="w-full rounded-md bg-violet-500/10 px-3 py-2 text-left transition-colors hover:bg-violet-500/15"
 				>
-					{isRunning ? (
-						<div className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
-					) : (
+					<div className="flex items-center gap-2">
 						<div className="h-2 w-2 rounded-full bg-violet-400/50" />
-					)}
-					<span className="text-sm font-medium text-violet-300">Branch</span>
-					<span className="truncate text-sm text-ink-dull">{item.description}</span>
-					{isRunning && (
-						<span className="ml-auto text-tiny text-violet-400/70">running</span>
-					)}
-					{!isRunning && (
-						<span className="ml-auto text-tiny text-ink-faint">
-							{expanded ? "▾" : "▸"}
-						</span>
-					)}
+						<span className="text-sm font-medium text-violet-300">Branch</span>
+						<span className="truncate text-sm text-ink-dull">{item.description}</span>
+						{item.conclusion && (
+							<span className="ml-auto text-tiny text-ink-faint">
+								{expanded ? "▾" : "▸"}
+							</span>
+						)}
+					</div>
 				</button>
 				{expanded && item.conclusion && (
 					<div className="mt-1 rounded-md border border-violet-500/10 bg-violet-500/5 px-3 py-2">
@@ -105,7 +109,6 @@ function BranchRunItem({ item }: { item: TimelineBranchRun }) {
 
 function WorkerRunItem({ item }: { item: TimelineWorkerRun }) {
 	const [expanded, setExpanded] = useState(false);
-	const isRunning = !item.completed_at;
 
 	return (
 		<div className="flex gap-3 px-3 py-2">
@@ -116,23 +119,18 @@ function WorkerRunItem({ item }: { item: TimelineWorkerRun }) {
 				<button
 					type="button"
 					onClick={() => setExpanded(!expanded)}
-					className="flex w-full items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-left transition-colors hover:bg-amber-500/15"
+					className="w-full rounded-md bg-amber-500/10 px-3 py-2 text-left transition-colors hover:bg-amber-500/15"
 				>
-					{isRunning ? (
-						<div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-					) : (
+					<div className="flex items-center gap-2">
 						<div className="h-2 w-2 rounded-full bg-amber-400/50" />
-					)}
-					<span className="text-sm font-medium text-amber-300">Worker</span>
-					<span className="truncate text-sm text-ink-dull">{item.task}</span>
-					{isRunning && (
-						<span className="ml-auto text-tiny text-amber-400/70">{item.status}</span>
-					)}
-					{!isRunning && (
-						<span className="ml-auto text-tiny text-ink-faint">
-							{expanded ? "▾" : "▸"}
-						</span>
-					)}
+						<span className="text-sm font-medium text-amber-300">Worker</span>
+						<span className="truncate text-sm text-ink-dull">{item.task}</span>
+						{item.result && (
+							<span className="ml-auto text-tiny text-ink-faint">
+								{expanded ? "▾" : "▸"}
+							</span>
+						)}
+					</div>
 				</button>
 				{expanded && item.result && (
 					<div className="mt-1 rounded-md border border-amber-500/10 bg-amber-500/5 px-3 py-2">
@@ -146,7 +144,11 @@ function WorkerRunItem({ item }: { item: TimelineWorkerRun }) {
 	);
 }
 
-function TimelineEntry({ item }: { item: TimelineItem }) {
+function TimelineEntry({ item, liveWorkers, liveBranches }: {
+	item: TimelineItem;
+	liveWorkers: Record<string, ActiveWorker>;
+	liveBranches: Record<string, ActiveBranch>;
+}) {
 	switch (item.type) {
 		case "message":
 			return (
@@ -170,18 +172,27 @@ function TimelineEntry({ item }: { item: TimelineItem }) {
 					</div>
 				</div>
 			);
-		case "branch_run":
+		case "branch_run": {
+			const live = liveBranches[item.id];
+			if (live) return <LiveBranchRunItem item={item} live={live} />;
 			return <BranchRunItem item={item} />;
-		case "worker_run":
+		}
+		case "worker_run": {
+			const live = liveWorkers[item.id];
+			if (live) return <LiveWorkerRunItem item={item} live={live} />;
 			return <WorkerRunItem item={item} />;
+		}
 	}
 }
 
 export function ChannelDetail({ agentId, channelId, channel, liveState }: ChannelDetailProps) {
 	const timeline = liveState?.timeline ?? [];
 	const isTyping = liveState?.isTyping ?? false;
-	const workers = Object.values(liveState?.workers ?? {});
-	const branches = Object.values(liveState?.branches ?? {});
+	const workers = liveState?.workers ?? {};
+	const branches = liveState?.branches ?? {};
+	const activeWorkerCount = Object.keys(workers).length;
+	const activeBranchCount = Object.keys(branches).length;
+	const hasActivity = activeWorkerCount > 0 || activeBranchCount > 0;
 
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const prevTimelineCount = useRef(timeline.length);
@@ -214,27 +225,39 @@ export function ChannelDetail({ agentId, channelId, channel, liveState }: Channe
 						{platformIcon(channel.platform)}
 					</span>
 				)}
-				{isTyping && (
-					<div className="flex items-center gap-1 ml-auto">
-						<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-						<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent [animation-delay:0.2s]" />
-						<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent [animation-delay:0.4s]" />
-						<span className="ml-1 text-tiny text-ink-faint">typing</span>
-					</div>
-				)}
-			</div>
 
-			{/* Activity bar */}
-			{(workers.length > 0 || branches.length > 0) && (
-				<div className="flex flex-col gap-2 border-b border-app-line/50 bg-app-darkBox/30 px-6 py-3">
-					{workers.map((worker) => (
-						<WorkerDetail key={worker.id} worker={worker} />
-					))}
-					{branches.map((branch) => (
-						<BranchDetail key={branch.id} branch={branch} />
-					))}
+				{/* Right side: activity indicators + typing */}
+				<div className="ml-auto flex items-center gap-3">
+					{hasActivity && (
+						<div className="flex items-center gap-2">
+							{activeWorkerCount > 0 && (
+								<div className="flex items-center gap-1.5">
+									<div className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+									<span className="text-tiny text-amber-300">
+										{activeWorkerCount} worker{activeWorkerCount !== 1 ? "s" : ""}
+									</span>
+								</div>
+							)}
+							{activeBranchCount > 0 && (
+								<div className="flex items-center gap-1.5">
+									<div className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+									<span className="text-tiny text-violet-300">
+										{activeBranchCount} branch{activeBranchCount !== 1 ? "es" : ""}
+									</span>
+								</div>
+							)}
+						</div>
+					)}
+					{isTyping && (
+						<div className="flex items-center gap-1">
+							<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+							<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent [animation-delay:0.2s]" />
+							<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent [animation-delay:0.4s]" />
+							<span className="ml-1 text-tiny text-ink-faint">typing</span>
+						</div>
+					)}
 				</div>
-			)}
+			</div>
 
 			{/* Timeline */}
 			<div className="flex-1 overflow-y-auto">
@@ -243,7 +266,12 @@ export function ChannelDetail({ agentId, channelId, channel, liveState }: Channe
 						<p className="text-sm text-ink-faint">No messages yet</p>
 					) : (
 						timeline.map((item) => (
-							<TimelineEntry key={item.id} item={item} />
+							<TimelineEntry
+								key={item.id}
+								item={item}
+								liveWorkers={workers}
+								liveBranches={branches}
+							/>
 						))
 					)}
 					{isTyping && (

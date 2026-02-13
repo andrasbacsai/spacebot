@@ -94,12 +94,14 @@ Native adapters for Discord and Slack with full platform feature support:
 
 ### Memory
 
-Long-term structured memory with graph associations and hybrid search:
+Not markdown files. Not unstructured blocks in a vector database. Spacebot's memory is a typed, graph-connected knowledge system — and this opinionated structure is why agents are productive out of the box.
 
-- **Six memory types** — Fact, Preference, Decision, Identity, Event, Observation
+Every memory has a type, an importance score, and graph edges connecting it to related memories. The agent doesn't just "remember things" — it knows the difference between a fact it learned, a decision that was made, a goal it's working toward, and a preference the user expressed. This structure is what lets the cortex synthesize a useful briefing instead of dumping raw search results into context.
+
+- **Eight memory types** — Fact, Preference, Decision, Identity, Event, Observation, Goal, Todo
 - **Graph edges** — RelatedTo, Updates, Contradicts, CausedBy, PartOf
 - **Hybrid recall** — vector similarity + full-text search merged via Reciprocal Rank Fusion
-- **File ingestion** — drop text files into the `ingest/` folder, memories are extracted automatically
+- **Memory import** — dump files into the `ingest/` folder and Spacebot extracts structured memories automatically. Migrating from OpenClaw? Drop your markdown memory files in and walk away.
 - **Cross-channel recall** — branches can read transcripts from other conversations
 - **Memory bulletin** — the cortex generates a periodic briefing of the agent's knowledge, injected into every conversation
 
@@ -228,7 +230,7 @@ Channel context hits 80%
 
 Memories are structured objects, not files. Every memory is a row in SQLite with typed metadata and graph connections, paired with a vector embedding in LanceDB.
 
-- **Six types** — Fact, Preference, Decision, Identity, Event, Observation
+- **Eight types** — Fact, Preference, Decision, Identity, Event, Observation, Goal, Todo
 - **Graph edges** — RelatedTo, Updates, Contradicts, CausedBy, PartOf
 - **Hybrid search** — Vector similarity + full-text search, merged via Reciprocal Rank Fusion
 - **Three creation paths** — Branch-initiated, compactor-initiated, cortex-initiated

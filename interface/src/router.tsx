@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
 	createRouter,
 	createRootRoute,
@@ -15,10 +16,15 @@ import { AgentTabs } from "@/components/AgentTabs";
 
 function RootLayout() {
 	const { liveStates, connectionState } = useLiveContext();
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
 	return (
 		<div className="flex h-screen bg-app">
-			<Sidebar liveStates={liveStates} />
+			<Sidebar
+				liveStates={liveStates}
+				collapsed={sidebarCollapsed}
+				onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+			/>
 			<div className="flex flex-1 flex-col overflow-hidden">
 				<ConnectionBanner state={connectionState} />
 				<div className="flex-1 overflow-hidden">
