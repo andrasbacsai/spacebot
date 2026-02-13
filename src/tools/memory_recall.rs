@@ -138,7 +138,7 @@ impl Tool for MemoryRecallTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Search and recall memories from the memory store. Supports multiple search modes: \"hybrid\" (semantic + keyword + graph search, requires a query), \"recent\" (most recent memories by time), \"important\" (highest importance memories), and \"typed\" (filter by memory type). Default mode is hybrid.".to_string(),
+            description: crate::prompts::text::get("tools/memory_recall").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -33,51 +33,69 @@ impl PromptEngine {
 
         let mut env = Environment::new();
 
-        // Register all English templates
+        // Register all templates from the central text registry
         // Process prompts
-        env.add_template("channel", CHANNEL_TEMPLATE)?;
-        env.add_template("branch", BRANCH_TEMPLATE)?;
-        env.add_template("worker", WORKER_TEMPLATE)?;
-        env.add_template("cortex", CORTEX_TEMPLATE)?;
-        env.add_template("cortex_bulletin", CORTEX_BULLETIN_TEMPLATE)?;
-        env.add_template("compactor", COMPACTOR_TEMPLATE)?;
-        env.add_template("memory_persistence", MEMORY_PERSISTENCE_TEMPLATE)?;
-        env.add_template("ingestion", INGESTION_TEMPLATE)?;
+        env.add_template("channel", crate::prompts::text::get("channel"))?;
+        env.add_template("branch", crate::prompts::text::get("branch"))?;
+        env.add_template("worker", crate::prompts::text::get("worker"))?;
+        env.add_template("cortex", crate::prompts::text::get("cortex"))?;
+        env.add_template(
+            "cortex_bulletin",
+            crate::prompts::text::get("cortex_bulletin"),
+        )?;
+        env.add_template("compactor", crate::prompts::text::get("compactor"))?;
+        env.add_template(
+            "memory_persistence",
+            crate::prompts::text::get("memory_persistence"),
+        )?;
+        env.add_template("ingestion", crate::prompts::text::get("ingestion"))?;
 
-        // Fragment templates for inline strings
+        // Fragment templates
         env.add_template(
             "fragments/worker_capabilities",
-            FRAGMENT_WORKER_CAPABILITIES,
+            crate::prompts::text::get("fragments/worker_capabilities"),
         )?;
         env.add_template(
             "fragments/conversation_context",
-            FRAGMENT_CONVERSATION_CONTEXT,
+            crate::prompts::text::get("fragments/conversation_context"),
         )?;
-        env.add_template("fragments/skills_channel", FRAGMENT_SKILLS_CHANNEL)?;
-        env.add_template("fragments/skills_worker", FRAGMENT_SKILLS_WORKER)?;
+        env.add_template(
+            "fragments/skills_channel",
+            crate::prompts::text::get("fragments/skills_channel"),
+        )?;
+        env.add_template(
+            "fragments/skills_worker",
+            crate::prompts::text::get("fragments/skills_worker"),
+        )?;
 
         // System message fragments
-        env.add_template("fragments/system/retrigger", FRAGMENT_SYSTEM_RETRIGGER)?;
-        env.add_template("fragments/system/truncation", FRAGMENT_SYSTEM_TRUNCATION)?;
+        env.add_template(
+            "fragments/system/retrigger",
+            crate::prompts::text::get("fragments/system/retrigger"),
+        )?;
+        env.add_template(
+            "fragments/system/truncation",
+            crate::prompts::text::get("fragments/system/truncation"),
+        )?;
         env.add_template(
             "fragments/system/worker_overflow",
-            FRAGMENT_SYSTEM_WORKER_OVERFLOW,
+            crate::prompts::text::get("fragments/system/worker_overflow"),
         )?;
         env.add_template(
             "fragments/system/worker_compact",
-            FRAGMENT_SYSTEM_WORKER_COMPACT,
+            crate::prompts::text::get("fragments/system/worker_compact"),
         )?;
         env.add_template(
             "fragments/system/memory_persistence",
-            FRAGMENT_SYSTEM_MEMORY_PERSISTENCE,
+            crate::prompts::text::get("fragments/system/memory_persistence"),
         )?;
         env.add_template(
             "fragments/system/cortex_synthesis",
-            FRAGMENT_SYSTEM_CORTEX_SYNTHESIS,
+            crate::prompts::text::get("fragments/system/cortex_synthesis"),
         )?;
         env.add_template(
             "fragments/system/ingestion_chunk",
-            FRAGMENT_SYSTEM_INGESTION_CHUNK,
+            crate::prompts::text::get("fragments/system/ingestion_chunk"),
         )?;
 
         Ok(Self {
@@ -307,94 +325,5 @@ pub struct SkillInfo {
     pub location: String,
 }
 
-// ============================================================================
-// Process Prompt Templates
-// ============================================================================
-
-const CHANNEL_TEMPLATE: &str = include_str!("../../prompts/en/channel.md.j2");
-const BRANCH_TEMPLATE: &str = include_str!("../../prompts/en/branch.md.j2");
-const WORKER_TEMPLATE: &str = include_str!("../../prompts/en/worker.md.j2");
-const CORTEX_TEMPLATE: &str = include_str!("../../prompts/en/cortex.md.j2");
-const CORTEX_BULLETIN_TEMPLATE: &str = include_str!("../../prompts/en/cortex_bulletin.md.j2");
-const COMPACTOR_TEMPLATE: &str = include_str!("../../prompts/en/compactor.md.j2");
-const MEMORY_PERSISTENCE_TEMPLATE: &str = include_str!("../../prompts/en/memory_persistence.md.j2");
-const INGESTION_TEMPLATE: &str = include_str!("../../prompts/en/ingestion.md.j2");
-
-// ============================================================================
-// Fragment Templates
-// ============================================================================
-
-const FRAGMENT_WORKER_CAPABILITIES: &str =
-    include_str!("../../prompts/en/fragments/worker_capabilities.md.j2");
-
-const FRAGMENT_CONVERSATION_CONTEXT: &str = r#"
-Platform: {{ platform }}
-{%- if server_name %}
-Server: {{ server_name }}
-{%- endif %}
-{%- if channel_name %}
-Channel: #{{ channel_name }}
-{%- endif %}
-Multiple users may be present. Each message is prefixed with [username].
-"#;
-
-const FRAGMENT_SKILLS_CHANNEL: &str = r#"
-## Available Skills
-
-You have access to the following skills. Skills contain specialized instructions for specific tasks. When a user's request matches a skill, spawn a worker to handle it and include the skill name in the task description so the worker knows which skill to follow.
-
-To use a skill, spawn a worker with a task like: "Use the [skill-name] skill to [task]. Read the skill instructions at [path] first."
-
-<available_skills>
-{%- for skill in skills %}
-  <skill>
-    <name>{{ skill.name }}</name>
-    <description>{{ skill.description }}</description>
-    <location>{{ skill.location }}</location>
-  </skill>
-{%- endfor %}
-</available_skills>
-"#;
-
-const FRAGMENT_SKILLS_WORKER: &str = r#"
-## Skill Instructions
-
-You are executing the **{{ skill_name }}** skill. Follow these instructions:
-
-{{ skill_content }}
-"#;
-
-// ============================================================================
-// System Message Fragments
-// ============================================================================
-
-const FRAGMENT_SYSTEM_RETRIGGER: &str = "[System: a background process has completed. Check your history and status block for the result, then respond to the user.]";
-
-const FRAGMENT_SYSTEM_TRUNCATION: &str = "[System: {{ remove_count }} older messages were truncated due to context limits. Some conversation history has been lost.]";
-
-const FRAGMENT_SYSTEM_WORKER_OVERFLOW: &str =
-    "[System: Previous attempt exceeded context limit. Older history has been compacted.]";
-
-const FRAGMENT_SYSTEM_WORKER_COMPACT: &str = r#"[System: Earlier work has been summarized to free up context. {{ remove_count }} messages compacted.]
-
-## Work completed so far:
-
-{{ recap }}"#;
-
-const FRAGMENT_SYSTEM_MEMORY_PERSISTENCE: &str = "Review the recent conversation and persist any important information as memories. Start by recalling existing memories related to the topics discussed, then save new or updated memories with appropriate associations.";
-
-const FRAGMENT_SYSTEM_CORTEX_SYNTHESIS: &str = r#"Synthesize the following memory data into a concise briefing of {{ max_words }} words or fewer.
-
-## Raw Memory Data
-
-{{ raw_sections }}"#;
-
-const FRAGMENT_SYSTEM_INGESTION_CHUNK: &str = r#"## File: {{ filename }} (chunk {{ chunk_number }} of {{ total_chunks }})
-
-Process the following text and extract any useful memories:
-
----
-
-{{ chunk }}
-
----"#;
+// All templates are now loaded from the centralized text registry (src/prompts/text.rs)
+// to support multiple languages at compile time.

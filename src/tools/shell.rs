@@ -73,7 +73,7 @@ impl Tool for ShellTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Execute a shell command. Use this for file operations, running scripts, building projects, git commands, and any system-level operations. Be careful with destructive operations. The command runs with a 60 second timeout by default.".to_string(),
+            description: crate::prompts::text::get("tools/shell").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

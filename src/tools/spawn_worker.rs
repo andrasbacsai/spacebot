@@ -89,11 +89,10 @@ impl Tool for SpawnWorkerTool {
             ""
         };
 
-        let description = format!(
-            "Spawn an independent worker process. By default uses a built-in agent with {tools} tools. The worker only sees the task description you provide — no conversation history.{opencode_note}",
-            tools = tools_list.join(", "),
-            opencode_note = opencode_note,
-        );
+        let base_description = crate::prompts::text::get("tools/spawn_worker");
+        let description = base_description
+            .replace("{tools}", &tools_list.join(", "))
+            .replace("{opencode_note}", opencode_note);
 
         let mut properties = serde_json::json!({
             "task": {

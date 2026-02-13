@@ -119,7 +119,7 @@ export function Overview({ liveStates }: OverviewProps) {
 								{channels.length} channel{channels.length !== 1 ? "s" : ""}
 							</span>
 						</div>
-						<div className="grid gap-3 sm:grid-cols-2">
+						<div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
 							{channels.map((channel) => (
 								<ChannelCard
 									key={channel.id}
@@ -147,7 +147,7 @@ export function Overview({ liveStates }: OverviewProps) {
 									{agentChannels.length === 0 ? (
 										<p className="text-sm text-ink-faint">No active channels</p>
 									) : (
-										<div className="grid gap-3 sm:grid-cols-2">
+										<div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
 											{agentChannels.map((channel) => (
 												<ChannelCard
 													key={channel.id}

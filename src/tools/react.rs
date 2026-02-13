@@ -48,10 +48,7 @@ impl Tool for ReactTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Add an emoji reaction to the user's message. Use this for \
-                lightweight acknowledgment — a thumbs up, a laugh, etc. Can be used \
-                alongside reply or skip."
-                .to_string(),
+            description: crate::prompts::text::get("tools/react").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

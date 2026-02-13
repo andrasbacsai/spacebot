@@ -121,7 +121,7 @@ impl Tool for WebSearchTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Search the web using Brave Search. Returns page titles, URLs, and description snippets for the top results. Use this to find current information, look up documentation, research topics, or verify facts.".to_string(),
+            description: crate::prompts::text::get("tools/web_search").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

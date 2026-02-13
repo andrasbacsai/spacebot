@@ -74,7 +74,7 @@ impl Tool for ReplyTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Send a message to the user. Optionally create a new thread.".to_string(),
+            description: crate::prompts::text::get("tools/reply").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

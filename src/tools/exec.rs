@@ -88,7 +88,7 @@ impl Tool for ExecTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Execute a subprocess with specific arguments and environment. This is more precise than shell for running specific programs. Use this for running compilers, formatters, test runners, or any external binary with specific arguments.".to_string(),
+            description: crate::prompts::text::get("tools/exec").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

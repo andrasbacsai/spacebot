@@ -23,12 +23,6 @@ export function AgentChannels({ agentId, liveStates }: AgentChannelsProps) {
 
 	return (
 		<div className="h-full overflow-y-auto p-6">
-			<div className="mb-4 flex items-center justify-between">
-				<h2 className="font-plex text-sm font-medium text-ink-dull">Channels</h2>
-				<span className="text-tiny text-ink-faint">
-					{channels.length} channel{channels.length !== 1 ? "s" : ""}
-				</span>
-			</div>
 			{isLoading ? (
 				<div className="flex items-center gap-2 text-ink-dull">
 					<div className="h-2 w-2 animate-pulse rounded-full bg-accent" />
@@ -37,7 +31,7 @@ export function AgentChannels({ agentId, liveStates }: AgentChannelsProps) {
 			) : channels.length === 0 ? (
 				<p className="text-sm text-ink-faint">No active channels for this agent.</p>
 			) : (
-				<div className="grid gap-3 sm:grid-cols-2">
+				<div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
 					{channels.map((channel) => (
 						<ChannelCard
 							key={channel.id}

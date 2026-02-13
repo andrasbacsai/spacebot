@@ -280,6 +280,10 @@ async fn run(config: spacebot::config::Config, foreground: bool) -> anyhow::Resu
     // Collected for the file watcher: (agent_id, workspace, runtime_config)
     let mut watcher_agents: Vec<(String, std::path::PathBuf, Arc<spacebot::config::RuntimeConfig>)> = Vec::new();
 
+    // Initialize the language for all text lookups (must happen before PromptEngine/tools)
+    spacebot::prompts::text::init("en")
+        .with_context(|| "failed to initialize language")?;
+
     // Create the PromptEngine with bundled templates (no file watching, no user overrides)
     let prompt_engine = spacebot::prompts::PromptEngine::new("en")
         .with_context(|| "failed to initialize prompt engine")?;

@@ -60,7 +60,7 @@ impl Tool for SendFileTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Send a file to the user as an attachment. Reads the file from the local filesystem and delivers it in the chat.".to_string(),
+            description: crate::prompts::text::get("tools/send_file").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

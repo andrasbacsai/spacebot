@@ -53,7 +53,7 @@ impl Tool for BranchTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Fork a branch to think independently. The branch gets a clone of your current conversation history and has access to memory_recall and memory_save tools. It runs independently and returns a conclusion.".to_string(),
+            description: crate::prompts::text::get("tools/branch").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

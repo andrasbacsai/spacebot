@@ -56,11 +56,7 @@ impl Tool for MemoryDeleteTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Forget a memory by ID. The memory is soft-deleted — it remains in the \
-                database but will no longer appear in search results or recall. Use this when a \
-                memory is wrong, outdated, or the user wants it removed. You can get memory IDs \
-                from memory_recall results."
-                .to_string(),
+            description: crate::prompts::text::get("tools/memory_delete").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

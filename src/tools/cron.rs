@@ -80,7 +80,7 @@ impl Tool for CronTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Manage scheduled recurring tasks (cron jobs). Use this to create, list, or delete cron jobs. A cron job runs a prompt on a timer and delivers the result to a messaging channel.".to_string(),
+            description: crate::prompts::text::get("tools/cron").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

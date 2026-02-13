@@ -67,11 +67,7 @@ impl Tool for SkipTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Choose not to respond to this message. Use this when the conversation \
-                doesn't need your input — the message wasn't directed at you, it's human banter \
-                you shouldn't interrupt, or someone already handled it. Calling this tool ends \
-                the turn with no visible output."
-                .to_string(),
+            description: crate::prompts::text::get("tools/skip").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

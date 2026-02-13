@@ -167,7 +167,7 @@ export function ChannelCard({
 									}`}>
 										{message.role === "user" ? (message.sender_name ?? "user") : "bot"}
 									</span>
-									<p className="line-clamp-1 text-sm text-ink-dul">{message.content}</p>
+									<p className="line-clamp-1 text-sm text-ink-faint">{message.content}</p>
 								</motion.div>
 							);
 						})}

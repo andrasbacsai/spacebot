@@ -99,7 +99,7 @@ impl Tool for MemorySaveTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Save a memory to long-term storage. Memories persist across conversations and can be recalled later via branches.".to_string(),
+            description: crate::prompts::text::get("tools/memory_save").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -90,7 +90,7 @@ impl Tool for ChannelRecallTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Recall conversation transcript from another channel. Use without a channel argument to list all available channels. Use with a channel name or ID to retrieve recent messages from that channel's conversation history.".to_string(),
+            description: crate::prompts::text::get("tools/channel_recall").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

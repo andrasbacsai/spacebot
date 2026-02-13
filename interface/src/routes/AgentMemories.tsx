@@ -9,6 +9,7 @@ import {
 	type MemorySort,
 	type MemoryType,
 } from "@/api/client";
+import { Dropdown } from "@/components/Dropdown";
 import { formatTimeAgo } from "@/lib/format";
 
 const SORT_OPTIONS: { value: MemorySort; label: string }[] = [
@@ -150,17 +151,7 @@ export function AgentMemories({ agentId }: AgentMemoriesProps) {
 				</div>
 
 				{/* Sort dropdown */}
-				<select
-					value={sort}
-					onChange={(event) => setSort(event.target.value as MemorySort)}
-					className="rounded-md border border-app-line bg-app-darkBox px-2 py-1.5 text-sm text-ink-dull focus:border-accent/50 focus:outline-none"
-				>
-					{SORT_OPTIONS.map((option) => (
-						<option key={option.value} value={option.value}>
-							{option.label}
-						</option>
-					))}
-				</select>
+				<Dropdown value={sort} onChange={setSort} options={SORT_OPTIONS} />
 			</div>
 
 			{/* Type filter pills */}

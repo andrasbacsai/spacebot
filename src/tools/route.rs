@@ -55,7 +55,7 @@ impl Tool for RouteTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Send a follow-up message to an active interactive worker.".to_string(),
+            description: crate::prompts::text::get("tools/route").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

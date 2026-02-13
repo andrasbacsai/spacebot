@@ -66,7 +66,7 @@ impl Tool for SetStatusTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Report the current status of your work. Use this to update the channel on your progress. The status will appear in the channel's status block. Keep statuses concise (1-2 sentences) and informative.".to_string(),
+            description: crate::prompts::text::get("tools/set_status").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

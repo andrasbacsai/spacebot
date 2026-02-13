@@ -84,7 +84,7 @@ impl Tool for FileTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Perform file operations: read, write, or list files. Use this to examine code, read documentation, write files, or explore directory structures. Protected paths (prompts/, identity/, data/, SOUL.md, IDENTITY.md, USER.md) cannot be accessed - use memory_save instead for that content.".to_string(),
+            description: crate::prompts::text::get("tools/file").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -292,11 +292,7 @@ impl Tool for BrowserTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Browser automation tool. Launch a headless Chrome browser, navigate pages, \
-                interact with elements, take screenshots, and extract page content. \
-                Workflow: launch → navigate → snapshot (get element refs) → act (click/type by ref) → screenshot. \
-                Element refs like \"e1\", \"e2\" are assigned during snapshot and used in act calls."
-                .to_string(),
+            description: crate::prompts::text::get("tools/browser").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

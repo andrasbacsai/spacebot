@@ -59,7 +59,7 @@ impl Tool for CancelTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Cancel an active worker or branch. Cancellation is immediate.".to_string(),
+            description: crate::prompts::text::get("tools/cancel").to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
