@@ -347,7 +347,7 @@ impl CortexChatSession {
     async fn load_channel_transcript(&self, channel_id: &str) -> Option<String> {
         let logger = ProcessRunLogger::new(self.deps.sqlite_pool.clone());
 
-        match logger.load_channel_timeline(channel_id, 50).await {
+        match logger.load_channel_timeline(channel_id, 50, None).await {
             Ok(items) if !items.is_empty() => {
                 let mut transcript = String::new();
                 for item in &items {

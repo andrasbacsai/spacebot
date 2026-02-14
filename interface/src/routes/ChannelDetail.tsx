@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ChannelInfo, TimelineItem, TimelineBranchRun, TimelineWorkerRun } from "@/api/client";
@@ -13,6 +13,7 @@ interface ChannelDetailProps {
 	channelId: string;
 	channel: ChannelInfo | undefined;
 	liveState: ChannelLiveState | undefined;
+	onLoadMore: () => void;
 }
 
 function LiveBranchRunItem({ item, live }: { item: TimelineBranchRun; live: ActiveBranch }) {
@@ -187,26 +188,38 @@ function TimelineEntry({ item, liveWorkers, liveBranches }: {
 	}
 }
 
-export function ChannelDetail({ agentId, channelId, channel, liveState }: ChannelDetailProps) {
+export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMore }: ChannelDetailProps) {
 	const timeline = liveState?.timeline ?? [];
+	const hasMore = liveState?.hasMore ?? false;
+	const loadingMore = liveState?.loadingMore ?? false;
 	const isTyping = liveState?.isTyping ?? false;
 	const workers = liveState?.workers ?? {};
 	const branches = liveState?.branches ?? {};
 	const activeWorkerCount = Object.keys(workers).length;
 	const activeBranchCount = Object.keys(branches).length;
 	const hasActivity = activeWorkerCount > 0 || activeBranchCount > 0;
-	const [cortexOpen, setCortexOpen] = useState(false);
+	const [cortexOpen, setCortexOpen] = useState(true);
 
-	const messagesEndRef = useRef<HTMLDivElement>(null);
-	const prevTimelineCount = useRef(timeline.length);
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const sentinelRef = useRef<HTMLDivElement>(null);
 
-	// Auto-scroll when new items arrive
-	useEffect(() => {
-		if (timeline.length > prevTimelineCount.current) {
-			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	// Trigger load when the sentinel at the top of the timeline becomes visible
+	const handleIntersection = useCallback((entries: IntersectionObserverEntry[]) => {
+		if (entries[0]?.isIntersecting && hasMore && !loadingMore) {
+			onLoadMore();
 		}
-		prevTimelineCount.current = timeline.length;
-	}, [timeline.length]);
+	}, [hasMore, loadingMore, onLoadMore]);
+
+	useEffect(() => {
+		const sentinel = sentinelRef.current;
+		if (!sentinel) return;
+		const observer = new IntersectionObserver(handleIntersection, {
+			root: scrollRef.current,
+			rootMargin: "200px",
+		});
+		observer.observe(sentinel);
+		return () => observer.disconnect();
+	}, [handleIntersection]);
 
 	return (
 		<div className="flex h-full">
@@ -278,9 +291,21 @@ export function ChannelDetail({ agentId, channelId, channel, liveState }: Channe
 					</div>
 				</div>
 
-				{/* Timeline */}
-				<div className="flex-1 overflow-y-auto">
+				{/* Timeline — flex-col-reverse keeps scroll pinned to bottom */}
+				<div ref={scrollRef} className="flex flex-1 flex-col-reverse overflow-y-auto">
 					<div className="flex flex-col gap-1 p-6">
+						{/* Sentinel for infinite scroll — sits above the oldest item */}
+						<div ref={sentinelRef} className="h-px" />
+						{loadingMore && (
+							<div className="flex justify-center py-3">
+								<span className="text-tiny text-ink-faint">Loading older messages...</span>
+							</div>
+						)}
+						{!hasMore && timeline.length > 0 && (
+							<div className="flex justify-center py-3">
+								<span className="text-tiny text-ink-faint/50">Beginning of conversation</span>
+							</div>
+						)}
 						{timeline.length === 0 ? (
 							<p className="text-sm text-ink-faint">No messages yet</p>
 						) : (
@@ -306,7 +331,6 @@ export function ChannelDetail({ agentId, channelId, channel, liveState }: Channe
 								</div>
 							</div>
 						)}
-						<div ref={messagesEndRef} />
 					</div>
 				</div>
 			</div>

@@ -155,6 +155,7 @@ export type TimelineItem = TimelineMessage | TimelineBranchRun | TimelineWorkerR
 
 export interface MessagesResponse {
 	items: TimelineItem[];
+	has_more: boolean;
 }
 
 export interface WorkerStatusInfo {
@@ -221,6 +222,22 @@ export interface AgentOverviewResponse {
 	activity_daily: { date: string; branches: number; workers: number }[];
 	activity_heatmap: { day: number; hour: number; count: number }[];
 	latest_bulletin: string | null;
+}
+
+export interface AgentSummary {
+	id: string;
+	channel_count: number;
+	memory_total: number;
+	cron_job_count: number;
+	activity_sparkline: number[];
+	last_activity_at: string | null;
+	last_bulletin_at: string | null;
+}
+
+export interface InstanceOverviewResponse {
+	uptime_seconds: number;
+	pid: number;
+	agents: AgentSummary[];
 }
 
 export type MemoryType =
@@ -487,14 +504,16 @@ export interface AgentConfigUpdateRequest {
 
 export const api = {
 	status: () => fetchJson<StatusResponse>("/status"),
+	overview: () => fetchJson<InstanceOverviewResponse>("/overview"),
 	agents: () => fetchJson<AgentsResponse>("/agents"),
 	agentOverview: (agentId: string) =>
 		fetchJson<AgentOverviewResponse>(`/agents/overview?agent_id=${encodeURIComponent(agentId)}`),
 	channels: () => fetchJson<ChannelsResponse>("/channels"),
-	channelMessages: (channelId: string, limit = 20) =>
-		fetchJson<MessagesResponse>(
-			`/channels/messages?channel_id=${encodeURIComponent(channelId)}&limit=${limit}`,
-		),
+	channelMessages: (channelId: string, limit = 20, before?: string) => {
+		const params = new URLSearchParams({ channel_id: channelId, limit: String(limit) });
+		if (before) params.set("before", before);
+		return fetchJson<MessagesResponse>(`/channels/messages?${params}`);
+	},
 	channelStatus: () => fetchJson<ChannelStatusResponse>("/channels/status"),
 	agentMemories: (agentId: string, params: MemoriesListParams = {}) => {
 		const search = new URLSearchParams({ agent_id: agentId });

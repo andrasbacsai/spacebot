@@ -8,12 +8,14 @@ interface LiveContextValue {
 	liveStates: Record<string, ChannelLiveState>;
 	channels: ChannelInfo[];
 	connectionState: ConnectionState;
+	loadOlderMessages: (channelId: string) => void;
 }
 
 const LiveContext = createContext<LiveContextValue>({
 	liveStates: {},
 	channels: [],
 	connectionState: "connecting",
+	loadOlderMessages: () => {},
 });
 
 export function useLiveContext() {
@@ -30,7 +32,7 @@ export function LiveContextProvider({ children }: { children: ReactNode }) {
 	});
 
 	const channels = channelsData?.channels ?? [];
-	const { liveStates, handlers, syncStatusSnapshot } = useChannelLiveState(channels);
+	const { liveStates, handlers, syncStatusSnapshot, loadOlderMessages } = useChannelLiveState(channels);
 
 	const onReconnect = useCallback(() => {
 		syncStatusSnapshot();
@@ -45,7 +47,7 @@ export function LiveContextProvider({ children }: { children: ReactNode }) {
 	});
 
 	return (
-		<LiveContext.Provider value={{ liveStates, channels, connectionState }}>
+		<LiveContext.Provider value={{ liveStates, channels, connectionState, loadOlderMessages }}>
 			{children}
 		</LiveContext.Provider>
 	);

@@ -198,7 +198,7 @@ const channelRoute = createRoute({
 	path: "/agents/$agentId/channels/$channelId",
 	component: function ChannelPage() {
 		const { agentId, channelId } = channelRoute.useParams();
-		const { liveStates, channels } = useLiveContext();
+		const { liveStates, channels, loadOlderMessages } = useLiveContext();
 		const channel = channels.find((c) => c.id === channelId);
 		return (
 			<div className="flex h-full flex-col">
@@ -209,6 +209,7 @@ const channelRoute = createRoute({
 						channelId={channelId}
 						channel={channel}
 						liveState={liveStates[channelId]}
+						onLoadMore={() => loadOlderMessages(channelId)}
 					/>
 				</div>
 			</div>

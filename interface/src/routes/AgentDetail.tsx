@@ -516,36 +516,38 @@ function MemoryDonut({ counts }: { counts: Record<string, number> }) {
 	}
 
 	return (
-		<div className="h-48">
-			<ResponsiveContainer width="100%" height="100%">
-				<PieChart>
-					<Pie
-						data={data}
-						dataKey="value"
-						nameKey="name"
-						cx="50%"
-						cy="50%"
-						innerRadius={50}
-						outerRadius={70}
-						paddingAngle={2}
-						stroke="none"
-					>
-						{data.map((entry, index) => (
-							<Cell key={`cell-${index}`} fill={entry.color} />
-						))}
-					</Pie>
-					<Tooltip
-						contentStyle={{
-							backgroundColor: CHART_COLORS.tooltip.bg,
-							border: `1px solid ${CHART_COLORS.tooltip.border}`,
-							borderRadius: "6px",
-							fontSize: "12px",
-						}}
-						itemStyle={{ color: CHART_COLORS.tooltip.text }}
-					/>
-				</PieChart>
-			</ResponsiveContainer>
-			<div className="flex flex-wrap gap-2 mt-2 justify-center">
+		<div>
+			<div className="h-40">
+				<ResponsiveContainer width="100%" height="100%">
+					<PieChart>
+						<Pie
+							data={data}
+							dataKey="value"
+							nameKey="name"
+							cx="50%"
+							cy="50%"
+							innerRadius={50}
+							outerRadius={70}
+							paddingAngle={2}
+							stroke="none"
+						>
+							{data.map((entry, index) => (
+								<Cell key={`cell-${index}`} fill={entry.color} />
+							))}
+						</Pie>
+						<Tooltip
+							contentStyle={{
+								backgroundColor: CHART_COLORS.tooltip.bg,
+								border: `1px solid ${CHART_COLORS.tooltip.border}`,
+								borderRadius: "6px",
+								fontSize: "12px",
+							}}
+							itemStyle={{ color: CHART_COLORS.tooltip.text }}
+						/>
+					</PieChart>
+				</ResponsiveContainer>
+			</div>
+			<div className="mt-2 flex flex-wrap justify-center gap-2">
 				{data.map((item) => (
 					<div key={item.name} className="flex items-center gap-1.5 text-tiny">
 						<div className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />

@@ -62,7 +62,7 @@ export function AgentMemories({ agentId }: AgentMemoriesProps) {
 	const [sort, setSort] = useState<MemorySort>("recent");
 	const [typeFilter, setTypeFilter] = useState<MemoryType | null>(null);
 	const [expandedId, setExpandedId] = useState<string | null>(null);
-	const [chatOpen, setChatOpen] = useState(false);
+	const [chatOpen, setChatOpen] = useState(true);
 
 	const parentRef = useRef<HTMLDivElement>(null);
 

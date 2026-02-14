@@ -318,12 +318,18 @@ impl ProcessRunLogger {
 
     /// Load a unified timeline for a channel: messages, branch runs, and worker runs
     /// interleaved chronologically (oldest first).
+    ///
+    /// When `before` is provided, only items with a timestamp strictly before that
+    /// value are returned, enabling cursor-based pagination.
     pub async fn load_channel_timeline(
         &self,
         channel_id: &str,
         limit: i64,
+        before: Option<&str>,
     ) -> crate::error::Result<Vec<TimelineItem>> {
-        let rows = sqlx::query(
+        let before_clause = if before.is_some() { "AND timestamp < ?3" } else { "" };
+
+        let query_str = format!(
             "SELECT * FROM ( \
                 SELECT 'message' AS item_type, id, role, sender_name, sender_id, content, \
                        NULL AS description, NULL AS conclusion, NULL AS task, NULL AS result, NULL AS status, \
@@ -339,13 +345,21 @@ impl ProcessRunLogger {
                        NULL, NULL, task, result, status, \
                        started_at AS timestamp, completed_at \
                 FROM worker_runs WHERE channel_id = ?1 \
-            ) ORDER BY timestamp DESC LIMIT ?2"
-        )
-        .bind(channel_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+            ) WHERE 1=1 {before_clause} ORDER BY timestamp DESC LIMIT ?2"
+        );
+
+        let mut query = sqlx::query(&query_str)
+            .bind(channel_id)
+            .bind(limit);
+
+        if let Some(before_ts) = before {
+            query = query.bind(before_ts);
+        }
+
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         let mut items: Vec<TimelineItem> = rows
             .into_iter()

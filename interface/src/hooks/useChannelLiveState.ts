@@ -39,12 +39,14 @@ export interface ChannelLiveState {
 	workers: Record<string, ActiveWorker>;
 	branches: Record<string, ActiveBranch>;
 	historyLoaded: boolean;
+	hasMore: boolean;
+	loadingMore: boolean;
 }
 
-const MAX_ITEMS = 50;
+const PAGE_SIZE = 50;
 
 function emptyLiveState(): ChannelLiveState {
-	return { isTyping: false, timeline: [], workers: {}, branches: {}, historyLoaded: false };
+	return { isTyping: false, timeline: [], workers: {}, branches: {}, historyLoaded: false, hasMore: true, loadingMore: false };
 }
 
 /** Get a sortable timestamp from any timeline item. */
@@ -74,7 +76,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 					[channel.id]: { ...(prev[channel.id] ?? emptyLiveState()), historyLoaded: true },
 				};
 
-				api.channelMessages(channel.id, MAX_ITEMS).then((data) => {
+				api.channelMessages(channel.id, PAGE_SIZE).then((data) => {
 					const history: TimelineItem[] = data.items;
 
 					setLiveStates((current) => {
@@ -89,7 +91,8 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 							...current,
 							[channel.id]: {
 								...existing,
-								timeline: [...history, ...newSseItems].slice(-MAX_ITEMS),
+								timeline: [...history, ...newSseItems],
+								hasMore: data.has_more,
 							},
 						};
 					});
@@ -161,7 +164,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 	const pushItem = useCallback((channelId: string, item: TimelineItem) => {
 		setLiveStates((prev) => {
 			const existing = getOrCreate(prev, channelId);
-			const timeline = [...existing.timeline, item].slice(-MAX_ITEMS);
+			const timeline = [...existing.timeline, item];
 			return { ...prev, [channelId]: { ...existing, timeline } };
 		});
 	}, []);
@@ -561,6 +564,45 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 		}
 	}, []);
 
+	const loadOlderMessages = useCallback((channelId: string) => {
+		setLiveStates((prev) => {
+			const state = prev[channelId];
+			if (!state || state.loadingMore || !state.hasMore) return prev;
+
+			const oldestItem = state.timeline[0];
+			if (!oldestItem) return prev;
+			const before = itemTimestamp(oldestItem);
+
+			// Mark as loading, then kick off the fetch outside setState
+			setTimeout(() => {
+				api.channelMessages(channelId, PAGE_SIZE, before).then((data) => {
+					setLiveStates((current) => {
+						const existing = current[channelId];
+						if (!existing) return current;
+						return {
+							...current,
+							[channelId]: {
+								...existing,
+								timeline: [...data.items, ...existing.timeline],
+								hasMore: data.has_more,
+								loadingMore: false,
+							},
+						};
+					});
+				}).catch((error) => {
+					console.warn(`Failed to load older messages for ${channelId}:`, error);
+					setLiveStates((current) => {
+						const existing = current[channelId];
+						if (!existing) return current;
+						return { ...current, [channelId]: { ...existing, loadingMore: false } };
+					});
+				});
+			}, 0);
+
+			return { ...prev, [channelId]: { ...state, loadingMore: true } };
+		});
+	}, []);
+
 	const handlers = {
 		inbound_message: handleInboundMessage,
 		outbound_message: handleOutboundMessage,
@@ -574,5 +616,5 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 		tool_completed: handleToolCompleted,
 	};
 
-	return { liveStates, handlers, syncStatusSnapshot };
+	return { liveStates, handlers, syncStatusSnapshot, loadOlderMessages };
 }

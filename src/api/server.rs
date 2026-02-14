@@ -63,6 +63,7 @@ struct ChannelsResponse {
 #[derive(Serialize)]
 struct MessagesResponse {
     items: Vec<TimelineItem>,
+    has_more: bool,
 }
 
 #[derive(Serialize)]
@@ -122,6 +123,35 @@ struct CronJobInfo {
     delivery_target: String,
     enabled: bool,
     active_hours: Option<(u8, u8)>,
+}
+
+/// Instance-wide overview response for the main dashboard.
+#[derive(Serialize)]
+struct InstanceOverviewResponse {
+    /// Total uptime across all agents (from daemon status).
+    uptime_seconds: u64,
+    /// Daemon PID.
+    pid: u32,
+    /// Per-agent summaries.
+    agents: Vec<AgentSummary>,
+}
+
+/// Summary of a single agent for the dashboard.
+#[derive(Serialize)]
+struct AgentSummary {
+    id: String,
+    /// Number of active channels.
+    channel_count: usize,
+    /// Total memory count.
+    memory_total: i64,
+    /// Number of cron jobs.
+    cron_job_count: usize,
+    /// 14-day activity sparkline (messages per day).
+    activity_sparkline: Vec<i64>,
+    /// Most recent activity across all channels.
+    last_activity_at: Option<String>,
+    /// Last bulletin generation time.
+    last_bulletin_at: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -347,6 +377,7 @@ pub async fn start_http_server(
     let api_routes = Router::new()
         .route("/health", get(health))
         .route("/status", get(status))
+        .route("/overview", get(instance_overview))
         .route("/events", get(events_sse))
         .route("/agents", get(list_agents))
         .route("/agents/overview", get(agent_overview))
@@ -575,6 +606,98 @@ struct AgentOverviewQuery {
     agent_id: String,
 }
 
+/// Get instance-wide overview for the main dashboard.
+async fn instance_overview(State(state): State<Arc<ApiState>>) -> Result<Json<InstanceOverviewResponse>, StatusCode> {
+    let uptime = state.started_at.elapsed();
+    let pools = state.agent_pools.load();
+    let configs = state.agent_configs.load();
+
+    let mut agents: Vec<AgentSummary> = Vec::new();
+
+    for agent_config in configs.iter() {
+        let agent_id = agent_config.id.clone();
+        
+        let Some(pool) = pools.get(&agent_id) else {
+            continue;
+        };
+
+        // Channel count
+        let channel_store = ChannelStore::new(pool.clone());
+        let channels = channel_store.list_active().await.unwrap_or_default();
+        let channel_count = channels.len();
+
+        // Last activity from channels
+        let last_activity_at = channels.iter()
+            .map(|c| &c.last_activity_at)
+            .max()
+            .map(|dt| dt.to_rfc3339());
+
+        // Memory count
+        let memory_total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM memories WHERE forgotten = 0",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+        // Cron job count
+        let cron_job_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM cron_jobs",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+        // 14-day activity sparkline
+        let activity_window = chrono::Utc::now() - chrono::Duration::days(14);
+        let activity_rows = sqlx::query(
+            "SELECT date(created_at) as date, COUNT(*) as count FROM conversation_messages WHERE created_at > ? GROUP BY date ORDER BY date",
+        )
+        .bind(activity_window.to_rfc3339())
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        // Build sparkline (14 values, one per day, 0 for missing days)
+        let mut activity_map: HashMap<String, i64> = HashMap::new();
+        for row in &activity_rows {
+            let date: String = row.get("date");
+            let count: i64 = row.get("count");
+            activity_map.insert(date, count);
+        }
+
+        let mut activity_sparkline: Vec<i64> = Vec::with_capacity(14);
+        for i in 0..14 {
+            let date = (chrono::Utc::now() - chrono::Duration::days(13 - i as i64)).format("%Y-%m-%d").to_string();
+            activity_sparkline.push(*activity_map.get(&date).unwrap_or(&0));
+        }
+
+        // Last bulletin time
+        let cortex_logger = CortexLogger::new(pool.clone());
+        let bulletin_events = cortex_logger
+            .load_events(1, 0, Some("bulletin_generated"))
+            .await
+            .unwrap_or_default();
+        let last_bulletin_at = bulletin_events.first().map(|e| e.created_at.clone());
+
+        agents.push(AgentSummary {
+            id: agent_id,
+            channel_count,
+            memory_total,
+            cron_job_count: cron_job_count as usize,
+            activity_sparkline,
+            last_activity_at,
+            last_bulletin_at,
+        });
+    }
+
+    Ok(Json(InstanceOverviewResponse {
+        uptime_seconds: uptime.as_secs(),
+        pid: std::process::id(),
+        agents,
+    }))
+}
+
 /// SSE endpoint streaming all agent events to connected clients.
 async fn events_sse(
     State(state): State<Arc<ApiState>>,
@@ -656,6 +779,7 @@ struct MessagesQuery {
     channel_id: String,
     #[serde(default = "default_message_limit")]
     limit: i64,
+    before: Option<String>,
 }
 
 fn default_message_limit() -> i64 {
@@ -670,12 +794,16 @@ async fn channel_messages(
 ) -> Json<MessagesResponse> {
     let pools = state.agent_pools.load();
     let limit = query.limit.min(100);
+    // Fetch one extra to determine if there are more pages
+    let fetch_limit = limit + 1;
 
     for (_agent_id, pool) in pools.iter() {
         let logger = ProcessRunLogger::new(pool.clone());
-        match logger.load_channel_timeline(&query.channel_id, limit).await {
+        match logger.load_channel_timeline(&query.channel_id, fetch_limit, query.before.as_deref()).await {
             Ok(items) if !items.is_empty() => {
-                return Json(MessagesResponse { items });
+                let has_more = items.len() as i64 > limit;
+                let items = if has_more { items[items.len() - limit as usize..].to_vec() } else { items };
+                return Json(MessagesResponse { items, has_more });
             }
             Ok(_) => continue,
             Err(error) => {
@@ -685,7 +813,7 @@ async fn channel_messages(
         }
     }
 
-    Json(MessagesResponse { items: vec![] })
+    Json(MessagesResponse { items: vec![], has_more: false })
 }
 
 /// Get live status (active workers, branches, completed items) for all channels.
