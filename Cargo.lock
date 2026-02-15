@@ -7208,6 +7208,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serenity",
+ "sha2",
  "slack-morphism",
  "sqlx",
  "tempfile",

@@ -167,6 +167,70 @@ impl EmbeddingTable {
         Ok(matches)
     }
     
+    /// Find memories similar to a given memory by its embedding.
+    /// Returns (memory_id, similarity) pairs where similarity = 1.0 - cosine_distance.
+    /// Results exclude the source memory itself.
+    pub async fn find_similar(
+        &self,
+        memory_id: &str,
+        threshold: f32,
+        limit: usize,
+    ) -> Result<Vec<(String, f32)>> {
+        // First, retrieve the embedding for this memory
+        use lancedb::query::{ExecutableQuery, QueryBase};
+
+        let rows: Vec<arrow_array::RecordBatch> = self
+            .table
+            .query()
+            .only_if(format!("id = '{}'", memory_id))
+            .execute()
+            .await
+            .map_err(|e| DbError::LanceDb(e.to_string()))?
+            .try_collect()
+            .await
+            .map_err(|e| DbError::LanceDb(e.to_string()))?;
+
+        // Extract the embedding from the first matching row
+        let Some(batch) = rows.first() else {
+            return Ok(Vec::new());
+        };
+        let Some(embedding_col) = batch.column_by_name("embedding") else {
+            return Ok(Vec::new());
+        };
+
+        let list_array = embedding_col
+            .as_any()
+            .downcast_ref::<arrow_array::FixedSizeListArray>();
+        let Some(list_array) = list_array else {
+            return Ok(Vec::new());
+        };
+        if list_array.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let values = list_array.value(0);
+        let float_array = values.as_primitive::<Float32Type>();
+        let embedding: Vec<f32> = float_array.values().to_vec();
+
+        // Now search for similar embeddings, fetching extra to account for filtering
+        let search_limit = limit + 1;
+        let results = self.vector_search(&embedding, search_limit).await?;
+
+        let mut similar = Vec::new();
+        for (id, distance) in results {
+            if id == memory_id {
+                continue;
+            }
+            let similarity = 1.0 - distance;
+            if similarity >= threshold {
+                similar.push((id, similarity));
+            }
+        }
+        similar.truncate(limit);
+
+        Ok(similar)
+    }
+
     /// Full-text search using Tantivy FTS.
     /// Returns (memory_id, score) pairs sorted by score (descending).
     pub async fn text_search(&self, query: &str, limit: usize) -> Result<Vec<(String, f32)>> {

@@ -12,14 +12,14 @@
 use crate::error::Result;
 use crate::llm::SpacebotModel;
 use crate::memory::search::{SearchConfig, SearchMode, SearchSort};
-use crate::memory::types::MemoryType;
+use crate::memory::types::{Association, MemoryType, RelationType};
 use crate::{AgentDeps, ProcessEvent, ProcessType};
 use crate::hooks::CortexHook;
 
 use rig::agent::AgentBuilder;
 use rig::completion::{CompletionModel, Prompt};
 use serde::Serialize;
-use sqlx::SqlitePool;
+use sqlx::{Row as _, SqlitePool};
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -503,4 +503,174 @@ pub async fn generate_bulletin(deps: &AgentDeps, logger: &CortexLogger) -> bool 
     }
 }
 
+// -- Association loop --
 
+/// Spawn the association loop for an agent.
+///
+/// Scans memories for embedding similarity and creates association edges
+/// between related memories. On first run, backfills all existing memories.
+/// Subsequent runs only process memories created since the last pass.
+pub fn spawn_association_loop(deps: AgentDeps, logger: CortexLogger) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        if let Err(error) = run_association_loop(&deps, &logger).await {
+            tracing::error!(%error, "cortex association loop exited with error");
+        }
+    })
+}
+
+async fn run_association_loop(deps: &AgentDeps, logger: &CortexLogger) -> anyhow::Result<()> {
+    tracing::info!("cortex association loop started");
+
+    // Short delay on startup to let the bulletin and embeddings settle
+    tokio::time::sleep(Duration::from_secs(10)).await;
+
+    // Backfill: process all existing memories on first run
+    let backfill_count = run_association_pass(deps, logger, None).await;
+    tracing::info!(associations_created = backfill_count, "association backfill complete");
+
+    let mut last_pass_at = chrono::Utc::now();
+
+    loop {
+        let cortex_config = **deps.runtime_config.cortex.load();
+        let interval = cortex_config.association_interval_secs;
+
+        tokio::time::sleep(Duration::from_secs(interval)).await;
+
+        let since = Some(last_pass_at);
+        last_pass_at = chrono::Utc::now();
+
+        let count = run_association_pass(deps, logger, since).await;
+        if count > 0 {
+            tracing::info!(associations_created = count, "association pass complete");
+        }
+    }
+}
+
+/// Run a single association pass.
+///
+/// If `since` is None, processes all non-forgotten memories (backfill).
+/// If `since` is Some, only processes memories created/updated after that time.
+/// Returns the number of associations created.
+async fn run_association_pass(
+    deps: &AgentDeps,
+    logger: &CortexLogger,
+    since: Option<chrono::DateTime<chrono::Utc>>,
+) -> usize {
+    let cortex_config = **deps.runtime_config.cortex.load();
+    let similarity_threshold = cortex_config.association_similarity_threshold;
+    let updates_threshold = cortex_config.association_updates_threshold;
+    let max_per_pass = cortex_config.association_max_per_pass;
+    let is_backfill = since.is_none();
+
+    let store = deps.memory_search.store();
+    let embedding_table = deps.memory_search.embedding_table();
+
+    // Get the memories to process
+    let memories = match fetch_memories_for_association(&deps.sqlite_pool, since).await {
+        Ok(memories) => memories,
+        Err(error) => {
+            tracing::warn!(%error, "failed to fetch memories for association pass");
+            return 0;
+        }
+    };
+
+    if memories.is_empty() {
+        return 0;
+    }
+
+    let memory_count = memories.len();
+    let mut created = 0_usize;
+
+    for memory_id in &memories {
+        if created >= max_per_pass {
+            break;
+        }
+
+        // Find similar memories via embedding search
+        let similar = match embedding_table
+            .find_similar(memory_id, similarity_threshold, 10)
+            .await
+        {
+            Ok(results) => results,
+            Err(error) => {
+                tracing::debug!(memory_id, %error, "similarity search failed for memory");
+                continue;
+            }
+        };
+
+        for (target_id, similarity) in similar {
+            if created >= max_per_pass {
+                break;
+            }
+
+            // Determine relation type based on similarity
+            let relation_type = if similarity >= updates_threshold {
+                RelationType::Updates
+            } else {
+                RelationType::RelatedTo
+            };
+
+            // Weight: map similarity range to 0.5-1.0
+            let weight = 0.5 + (similarity - similarity_threshold)
+                / (1.0 - similarity_threshold) * 0.5;
+
+            let association = Association::new(memory_id, &target_id, relation_type)
+                .with_weight(weight.clamp(0.0, 1.0));
+
+            if let Err(error) = store.create_association(&association).await {
+                tracing::debug!(%error, "failed to create association");
+                continue;
+            }
+
+            created += 1;
+        }
+    }
+
+    if created > 0 {
+        let summary = if is_backfill {
+            format!("Backfill: created {created} associations from {memory_count} memories")
+        } else {
+            format!("Created {created} associations from {memory_count} new memories")
+        };
+
+        logger.log(
+            "association_created",
+            &summary,
+            Some(serde_json::json!({
+                "associations_created": created,
+                "memories_processed": memory_count,
+                "backfill": is_backfill,
+                "similarity_threshold": similarity_threshold,
+                "updates_threshold": updates_threshold,
+            })),
+        );
+    }
+
+    created
+}
+
+/// Fetch memory IDs to process for association.
+/// If `since` is None, returns all non-forgotten memory IDs (backfill).
+/// If `since` is Some, returns IDs of memories created or updated since that time.
+async fn fetch_memories_for_association(
+    pool: &SqlitePool,
+    since: Option<chrono::DateTime<chrono::Utc>>,
+) -> anyhow::Result<Vec<String>> {
+    let rows = if let Some(since) = since {
+        sqlx::query(
+            "SELECT id FROM memories WHERE forgotten = 0 AND (created_at > ? OR updated_at > ?) ORDER BY created_at DESC",
+        )
+        .bind(since)
+        .bind(since)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id FROM memories WHERE forgotten = 0 ORDER BY importance DESC, created_at DESC",
+        )
+        .fetch_all(pool)
+        .await?
+    };
+
+    Ok(rows.iter().map(|row| row.get("id")).collect())
+}

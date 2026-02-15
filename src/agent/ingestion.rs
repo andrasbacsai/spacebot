@@ -3,10 +3,13 @@
 //! Polls a directory in the agent workspace for text files, chunks them, and
 //! processes each chunk through the memory recall + save flow. Files are deleted
 //! after all chunks are successfully ingested.
+//!
+//! Progress is tracked per-chunk in SQLite using a SHA-256 hash of the file
+//! content. If the server restarts mid-file, already-completed chunks are
+//! skipped on the next run.
 
 use crate::config::IngestionConfig;
 use crate::llm::SpacebotModel;
-use crate::memory::MemorySearch;
 use crate::AgentDeps;
 use crate::ProcessType;
 
@@ -14,9 +17,11 @@ use anyhow::Context as _;
 use rig::agent::AgentBuilder;
 use rig::completion::{CompletionModel, Prompt};
 use rig::tool::server::ToolServerHandle;
+use sha2::{Digest, Sha256};
+use sqlx::SqlitePool;
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 /// Spawn the ingestion polling loop for an agent.
@@ -134,7 +139,18 @@ fn is_text_file(path: &Path) -> bool {
     )
 }
 
+/// SHA-256 hex digest of file content, used as a stable identifier for
+/// progress tracking across restarts.
+fn content_hash(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 /// Process a single file: read, chunk, process each chunk, then delete.
+///
+/// Checks the ingestion_progress table to skip chunks that were already
+/// completed in a previous run (e.g. before a server restart).
 async fn process_file(
     path: &Path,
     deps: &AgentDeps,
@@ -157,18 +173,41 @@ async fn process_file(
         return Ok(());
     }
 
+    let hash = content_hash(&content);
     let chunks = chunk_text(&content, config.chunk_size);
     let total_chunks = chunks.len();
 
-    tracing::info!(
-        file = %filename,
-        chunks = total_chunks,
-        total_chars = content.len(),
-        "chunked file for ingestion"
-    );
+    let completed = load_completed_chunks(&deps.sqlite_pool, &hash).await?;
+    let remaining = total_chunks - completed.len();
+
+    if !completed.is_empty() {
+        tracing::info!(
+            file = %filename,
+            chunks = total_chunks,
+            already_completed = completed.len(),
+            remaining,
+            "resuming partially ingested file"
+        );
+    } else {
+        tracing::info!(
+            file = %filename,
+            chunks = total_chunks,
+            total_chars = content.len(),
+            "chunked file for ingestion"
+        );
+    }
 
     for (index, chunk) in chunks.iter().enumerate() {
         let chunk_number = index + 1;
+
+        if completed.contains(&(index as i64)) {
+            tracing::debug!(
+                file = %filename,
+                chunk = %format!("{chunk_number}/{total_chunks}"),
+                "chunk already ingested, skipping"
+            );
+            continue;
+        }
 
         tracing::info!(
             file = %filename,
@@ -177,23 +216,91 @@ async fn process_file(
             "processing chunk"
         );
 
-        if let Err(error) = process_chunk(chunk, filename, chunk_number, total_chunks, deps).await {
-            tracing::error!(
-                file = %filename,
-                chunk = %format!("{chunk_number}/{total_chunks}"),
-                %error,
-                "failed to process chunk"
-            );
-            // Continue with remaining chunks rather than aborting the whole file
+        match process_chunk(chunk, filename, chunk_number, total_chunks, deps).await {
+            Ok(()) => {
+                record_chunk_completed(
+                    &deps.sqlite_pool,
+                    &hash,
+                    index as i64,
+                    total_chunks as i64,
+                    filename,
+                )
+                .await?;
+            }
+            Err(error) => {
+                tracing::error!(
+                    file = %filename,
+                    chunk = %format!("{chunk_number}/{total_chunks}"),
+                    %error,
+                    "failed to process chunk"
+                );
+                // Continue with remaining chunks rather than aborting the whole file
+            }
         }
     }
 
-    // Delete the file after all chunks are processed
+    // Clean up progress records and delete the file
+    delete_progress(&deps.sqlite_pool, &hash).await?;
+
     tokio::fs::remove_file(path)
         .await
         .with_context(|| format!("failed to delete ingested file: {}", path.display()))?;
 
     tracing::info!(file = %filename, chunks = total_chunks, "file ingestion complete, file deleted");
+
+    Ok(())
+}
+
+// -- Progress tracking queries --------------------------------------------------
+
+/// Load the set of chunk indices already completed for a given content hash.
+async fn load_completed_chunks(
+    pool: &SqlitePool,
+    hash: &str,
+) -> anyhow::Result<HashSet<i64>> {
+    let rows = sqlx::query_scalar::<_, i64>(
+        "SELECT chunk_index FROM ingestion_progress WHERE content_hash = ?"
+    )
+    .bind(hash)
+    .fetch_all(pool)
+    .await
+    .context("failed to load ingestion progress")?;
+
+    Ok(rows.into_iter().collect())
+}
+
+/// Record a single chunk as completed.
+async fn record_chunk_completed(
+    pool: &SqlitePool,
+    hash: &str,
+    chunk_index: i64,
+    total_chunks: i64,
+    filename: &str,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO ingestion_progress (content_hash, chunk_index, total_chunks, filename)
+        VALUES (?, ?, ?, ?)
+        "#,
+    )
+    .bind(hash)
+    .bind(chunk_index)
+    .bind(total_chunks)
+    .bind(filename)
+    .execute(pool)
+    .await
+    .context("failed to record ingestion progress")?;
+
+    Ok(())
+}
+
+/// Remove all progress records for a content hash after the file is fully processed.
+async fn delete_progress(pool: &SqlitePool, hash: &str) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM ingestion_progress WHERE content_hash = ?")
+        .bind(hash)
+        .execute(pool)
+        .await
+        .context("failed to clean up ingestion progress")?;
 
     Ok(())
 }
@@ -340,5 +447,19 @@ mod tests {
         assert!(is_text_file(Path::new("no_extension")));
         assert!(!is_text_file(Path::new("image.png")));
         assert!(!is_text_file(Path::new("binary.exe")));
+    }
+
+    #[test]
+    fn test_content_hash_deterministic() {
+        let hash1 = content_hash("hello world");
+        let hash2 = content_hash("hello world");
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_content_hash_differs_for_different_content() {
+        let hash1 = content_hash("hello world");
+        let hash2 = content_hash("hello world!");
+        assert_ne!(hash1, hash2);
     }
 }

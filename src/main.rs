@@ -977,12 +977,16 @@ async fn initialize_agents(
         }
     }
 
-    // Start cortex bulletin loops for each agent
+    // Start cortex bulletin loops and association loops for each agent
     for (agent_id, agent) in agents.iter() {
         let cortex_logger = spacebot::agent::cortex::CortexLogger::new(agent.db.sqlite.clone());
-        let handle = spacebot::agent::cortex::spawn_bulletin_loop(agent.deps.clone(), cortex_logger);
-        cortex_handles.push(handle);
+        let bulletin_handle = spacebot::agent::cortex::spawn_bulletin_loop(agent.deps.clone(), cortex_logger.clone());
+        cortex_handles.push(bulletin_handle);
         tracing::info!(agent_id = %agent_id, "cortex bulletin loop started");
+
+        let association_handle = spacebot::agent::cortex::spawn_association_loop(agent.deps.clone(), cortex_logger);
+        cortex_handles.push(association_handle);
+        tracing::info!(agent_id = %agent_id, "cortex association loop started");
     }
 
     // Create cortex chat sessions for each agent

@@ -256,6 +256,14 @@ pub struct CortexConfig {
     pub bulletin_max_words: usize,
     /// Max LLM turns for bulletin generation.
     pub bulletin_max_turns: usize,
+    /// Interval in seconds between association passes.
+    pub association_interval_secs: u64,
+    /// Minimum cosine similarity to create a RelatedTo edge.
+    pub association_similarity_threshold: f32,
+    /// Minimum cosine similarity to create an Updates edge (near-duplicate).
+    pub association_updates_threshold: f32,
+    /// Max associations to create per pass (rate limit).
+    pub association_max_per_pass: usize,
 }
 
 impl Default for CortexConfig {
@@ -268,6 +276,10 @@ impl Default for CortexConfig {
             bulletin_interval_secs: 3600,
             bulletin_max_words: 1500,
             bulletin_max_turns: 15,
+            association_interval_secs: 300,
+            association_similarity_threshold: 0.85,
+            association_updates_threshold: 0.95,
+            association_max_per_pass: 100,
         }
     }
 }
@@ -849,6 +861,10 @@ struct TomlCortexConfig {
     bulletin_interval_secs: Option<u64>,
     bulletin_max_words: Option<usize>,
     bulletin_max_turns: Option<usize>,
+    association_interval_secs: Option<u64>,
+    association_similarity_threshold: Option<f32>,
+    association_updates_threshold: Option<f32>,
+    association_max_per_pass: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -1234,6 +1250,18 @@ impl Config {
                     bulletin_max_turns: c
                         .bulletin_max_turns
                         .unwrap_or(base_defaults.cortex.bulletin_max_turns),
+                    association_interval_secs: c
+                        .association_interval_secs
+                        .unwrap_or(base_defaults.cortex.association_interval_secs),
+                    association_similarity_threshold: c
+                        .association_similarity_threshold
+                        .unwrap_or(base_defaults.cortex.association_similarity_threshold),
+                    association_updates_threshold: c
+                        .association_updates_threshold
+                        .unwrap_or(base_defaults.cortex.association_updates_threshold),
+                    association_max_per_pass: c
+                        .association_max_per_pass
+                        .unwrap_or(base_defaults.cortex.association_max_per_pass),
                 })
                 .unwrap_or(base_defaults.cortex),
             browser: toml
@@ -1390,6 +1418,18 @@ impl Config {
                         bulletin_max_turns: c
                             .bulletin_max_turns
                             .unwrap_or(defaults.cortex.bulletin_max_turns),
+                        association_interval_secs: c
+                            .association_interval_secs
+                            .unwrap_or(defaults.cortex.association_interval_secs),
+                        association_similarity_threshold: c
+                            .association_similarity_threshold
+                            .unwrap_or(defaults.cortex.association_similarity_threshold),
+                        association_updates_threshold: c
+                            .association_updates_threshold
+                            .unwrap_or(defaults.cortex.association_updates_threshold),
+                        association_max_per_pass: c
+                            .association_max_per_pass
+                            .unwrap_or(defaults.cortex.association_max_per_pass),
                     }),
                     browser: a.browser.map(|b| BrowserConfig {
                         enabled: b.enabled.unwrap_or(defaults.browser.enabled),

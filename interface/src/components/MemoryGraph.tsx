@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
+import { EdgeArrowProgram } from "sigma/rendering";
 import FA2Layout from "graphology-layout-forceatlas2/worker";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -147,6 +148,9 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 					defaultEdgeType: "arrow",
 					defaultEdgeColor: "#444444",
 					edgeLabelSize: 10,
+					edgeProgramClasses: {
+						arrow: EdgeArrowProgram,
+					},
 					nodeReducer: (node, data) => {
 						const res = { ...data };
 						if (hoveredNode && hoveredNode !== node) {
@@ -534,7 +538,7 @@ function addEdgesToGraph(graph: Graph, edges: AssociationItem[]) {
 			graph.addEdgeWithKey(edge.id, edge.source_id, edge.target_id, {
 				color: EDGE_COLORS[edge.relation_type] ?? "#444444",
 				size: 1 + edge.weight * 2,
-				type: edge.relation_type === "contradicts" ? "dashed" : "arrow",
+				type: "arrow",
 				relationType: edge.relation_type,
 			});
 		}
