@@ -7,13 +7,23 @@ Get Spacebot running locally in under 5 minutes.
 ```bash
 docker run -d \
   --name spacebot \
+  -v spacebot-data:/data \
+  -p 19898:19898 \
+  ghcr.io/spacedriveapp/spacebot:latest
+```
+
+The web UI is available at `http://localhost:19898`. On first launch with no API keys configured, the UI will prompt you to add a provider key in Settings. You can also pass keys as environment variables:
+
+```bash
+docker run -d \
+  --name spacebot \
   -e ANTHROPIC_API_KEY="sk-ant-..." \
   -v spacebot-data:/data \
   -p 19898:19898 \
   ghcr.io/spacedriveapp/spacebot:latest
 ```
 
-The web UI is available at `http://localhost:19898`. See [docker.md](docker.md) for image variants, compose files, and configuration options.
+See [docker.md](docker.md) for image variants, compose files, and configuration options.
 
 ## Build from source
 

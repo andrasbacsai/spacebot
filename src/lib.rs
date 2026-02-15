@@ -26,6 +26,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Signal from the API to the main event loop to trigger provider setup.
+#[derive(Debug)]
+pub enum ProviderSetupEvent {
+    /// New provider keys have been added. Reinitialize agents.
+    ProvidersConfigured,
+}
+
 /// Agent identifier type.
 pub type AgentId = Arc<str>;
 

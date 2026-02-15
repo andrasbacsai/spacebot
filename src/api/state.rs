@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 /// Summary of an agent's configuration, exposed via the API.
 #[derive(Debug, Clone, Serialize)]
@@ -58,6 +58,8 @@ pub struct ApiState {
     pub runtime_configs: ArcSwap<HashMap<String, Arc<RuntimeConfig>>>,
     /// Shared reference to the Discord permissions ArcSwap (same instance used by the adapter and file watcher).
     pub discord_permissions: RwLock<Option<Arc<ArcSwap<DiscordPermissions>>>>,
+    /// Sender to signal the main event loop that provider keys have been configured.
+    pub provider_setup_tx: mpsc::Sender<crate::ProviderSetupEvent>,
 }
 
 /// Events sent to SSE clients. Wraps ProcessEvents with agent context.
@@ -137,7 +139,7 @@ pub enum ApiEvent {
 }
 
 impl ApiState {
-    pub fn new() -> Self {
+    pub fn new_with_provider_sender(provider_setup_tx: mpsc::Sender<crate::ProviderSetupEvent>) -> Self {
         let (event_tx, _) = broadcast::channel(512);
         Self {
             started_at: Instant::now(),
@@ -154,6 +156,7 @@ impl ApiState {
             cron_schedulers: arc_swap::ArcSwap::from_pointee(HashMap::new()),
             runtime_configs: ArcSwap::from_pointee(HashMap::new()),
             discord_permissions: RwLock::new(None),
+            provider_setup_tx,
         }
     }
 

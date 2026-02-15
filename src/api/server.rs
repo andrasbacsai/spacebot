@@ -411,7 +411,9 @@ pub async fn start_http_server(
         .route("/agents/cron/executions", get(cron_executions))
         .route("/agents/cron/trigger", post(trigger_cron))
         .route("/agents/cron/toggle", put(toggle_cron))
-        .route("/channels/cancel", post(cancel_process));
+        .route("/channels/cancel", post(cancel_process))
+        .route("/providers", get(get_providers).put(update_provider))
+        .route("/providers/{provider}", axum::routing::delete(delete_provider));
 
     let app = Router::new()
         .nest("/api", api_routes)
@@ -1817,6 +1819,200 @@ async fn cancel_process(
         }
         _ => Err(StatusCode::BAD_REQUEST),
     }
+}
+
+// -- Provider management --
+
+#[derive(Serialize)]
+struct ProviderStatus {
+    anthropic: bool,
+    openai: bool,
+    openrouter: bool,
+}
+
+#[derive(Serialize)]
+struct ProvidersResponse {
+    providers: ProviderStatus,
+    has_any: bool,
+}
+
+#[derive(Deserialize)]
+struct ProviderUpdateRequest {
+    provider: String,
+    api_key: String,
+}
+
+#[derive(Serialize)]
+struct ProviderUpdateResponse {
+    success: bool,
+    message: String,
+}
+
+async fn get_providers(
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ProvidersResponse>, StatusCode> {
+    let config_path = state.config_path.read().await.clone();
+
+    // Check which providers have keys by reading the config
+    let (anthropic, openai, openrouter) = if config_path.exists() {
+        let content = tokio::fs::read_to_string(&config_path)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let doc: toml_edit::DocumentMut = content
+            .parse()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let has_key = |key: &str, env_var: &str| -> bool {
+            // Check the TOML [llm] table
+            if let Some(llm) = doc.get("llm") {
+                if let Some(val) = llm.get(key) {
+                    if let Some(s) = val.as_str() {
+                        // If it's an env reference, check if the env var is set
+                        if let Some(var_name) = s.strip_prefix("env:") {
+                            return std::env::var(var_name).is_ok();
+                        }
+                        return !s.is_empty();
+                    }
+                }
+            }
+            // Fall back to checking env vars directly
+            std::env::var(env_var).is_ok()
+        };
+
+        (
+            has_key("anthropic_key", "ANTHROPIC_API_KEY"),
+            has_key("openai_key", "OPENAI_API_KEY"),
+            has_key("openrouter_key", "OPENROUTER_API_KEY"),
+        )
+    } else {
+        // No config file — check env vars only
+        (
+            std::env::var("ANTHROPIC_API_KEY").is_ok(),
+            std::env::var("OPENAI_API_KEY").is_ok(),
+            std::env::var("OPENROUTER_API_KEY").is_ok(),
+        )
+    };
+
+    let providers = ProviderStatus {
+        anthropic,
+        openai,
+        openrouter,
+    };
+    let has_any = providers.anthropic || providers.openai || providers.openrouter;
+
+    Ok(Json(ProvidersResponse { providers, has_any }))
+}
+
+async fn update_provider(
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<ProviderUpdateRequest>,
+) -> Result<Json<ProviderUpdateResponse>, StatusCode> {
+    let key_name = match request.provider.as_str() {
+        "anthropic" => "anthropic_key",
+        "openai" => "openai_key",
+        "openrouter" => "openrouter_key",
+        _ => {
+            return Ok(Json(ProviderUpdateResponse {
+                success: false,
+                message: format!("Unknown provider: {}", request.provider),
+            }));
+        }
+    };
+
+    if request.api_key.trim().is_empty() {
+        return Ok(Json(ProviderUpdateResponse {
+            success: false,
+            message: "API key cannot be empty".into(),
+        }));
+    }
+
+    let config_path = state.config_path.read().await.clone();
+
+    // Read existing config or create a new document
+    let content = if config_path.exists() {
+        tokio::fs::read_to_string(&config_path)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        String::new()
+    };
+
+    let mut doc: toml_edit::DocumentMut = content
+        .parse()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Ensure [llm] table exists
+    if doc.get("llm").is_none() {
+        doc["llm"] = toml_edit::Item::Table(toml_edit::Table::new());
+    }
+
+    // Set the key
+    doc["llm"][key_name] = toml_edit::value(request.api_key);
+
+    // Write back to disk
+    tokio::fs::write(&config_path, doc.to_string())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Signal the main loop that providers have been configured
+    state
+        .provider_setup_tx
+        .try_send(crate::ProviderSetupEvent::ProvidersConfigured)
+        .ok();
+
+    Ok(Json(ProviderUpdateResponse {
+        success: true,
+        message: format!("Provider '{}' configured", request.provider),
+    }))
+}
+
+async fn delete_provider(
+    State(state): State<Arc<ApiState>>,
+    axum::extract::Path(provider): axum::extract::Path<String>,
+) -> Result<Json<ProviderUpdateResponse>, StatusCode> {
+    let key_name = match provider.as_str() {
+        "anthropic" => "anthropic_key",
+        "openai" => "openai_key",
+        "openrouter" => "openrouter_key",
+        _ => {
+            return Ok(Json(ProviderUpdateResponse {
+                success: false,
+                message: format!("Unknown provider: {}", provider),
+            }));
+        }
+    };
+
+    let config_path = state.config_path.read().await.clone();
+    if !config_path.exists() {
+        return Ok(Json(ProviderUpdateResponse {
+            success: false,
+            message: "No config file found".into(),
+        }));
+    }
+
+    let content = tokio::fs::read_to_string(&config_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut doc: toml_edit::DocumentMut = content
+        .parse()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Remove the key from [llm]
+    if let Some(llm) = doc.get_mut("llm") {
+        if let Some(table) = llm.as_table_mut() {
+            table.remove(key_name);
+        }
+    }
+
+    tokio::fs::write(&config_path, doc.to_string())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(ProviderUpdateResponse {
+        success: true,
+        message: format!("Provider '{}' removed", provider),
+    }))
 }
 
 // -- Static file serving --

@@ -57,6 +57,13 @@ pub struct LlmConfig {
     pub openrouter_key: Option<String>,
 }
 
+impl LlmConfig {
+    /// Check if any provider key is configured.
+    pub fn has_any_key(&self) -> bool {
+        self.anthropic_key.is_some() || self.openai_key.is_some() || self.openrouter_key.is_some()
+    }
+}
+
 /// Defaults inherited by all agents. Individual agents can override any field.
 #[derive(Debug, Clone)]
 pub struct DefaultsConfig {
@@ -1061,12 +1068,8 @@ impl Config {
             openrouter_key: std::env::var("OPENROUTER_API_KEY").ok(),
         };
 
-        if llm.anthropic_key.is_none() && llm.openai_key.is_none() && llm.openrouter_key.is_none() {
-            return Err(ConfigError::Invalid(
-                "no LLM provider API key found — set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY".into(),
-            )
-            .into());
-        }
+        // Note: We allow boot without provider keys now. System starts in setup mode.
+        // Agents are initialized later when keys are added via API.
 
         // Env-only routing: check for env overrides on channel/worker models
         let mut routing = RoutingConfig::default();
@@ -1130,12 +1133,8 @@ impl Config {
                 .or_else(|| std::env::var("OPENROUTER_API_KEY").ok()),
         };
 
-        if llm.anthropic_key.is_none() && llm.openai_key.is_none() && llm.openrouter_key.is_none() {
-            return Err(ConfigError::Invalid(
-                "no LLM provider API key found — set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY".into(),
-            )
-            .into());
-        }
+        // Note: We allow boot without provider keys now. System starts in setup mode.
+        // Agents are initialized later when keys are added via API.
 
         let base_defaults = DefaultsConfig::default();
         let defaults = DefaultsConfig {

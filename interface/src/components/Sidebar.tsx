@@ -29,6 +29,7 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 
 	const matchRoute = useMatchRoute();
 	const isOverview = matchRoute({ to: "/" });
+	const isSettings = matchRoute({ to: "/settings" });
 
 	const agentActivity = useMemo(() => {
 		const byAgent: Record<string, { workers: number; branches: number }> = {};
@@ -88,17 +89,28 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 							<path d="M2 2h5v5H2V2zm7 0h5v5H9V2zm-7 7h5v5H2V9zm7 0h5v5H9V9z" />
 						</svg>
 					</Link>
-					<Link
-						to="/logs"
-						className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-inkDull hover:bg-sidebar-selected/50 [&.active]:bg-sidebar-selected [&.active]:text-sidebar-ink"
-						activeProps={{ className: "active" }}
-						title="Logs"
-					>
-						<svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
-							<path d="M2 3h12v1.5H2V3zm0 3.5h12V8H2V6.5zm0 3.5h8V11.5H2V10z" />
-						</svg>
-					</Link>
-					<div className="my-1 h-px w-5 bg-sidebar-line" />
+				<Link
+					to="/logs"
+					className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-inkDull hover:bg-sidebar-selected/50 [&.active]:bg-sidebar-selected [&.active]:text-sidebar-ink"
+					activeProps={{ className: "active" }}
+					title="Logs"
+				>
+					<svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
+						<path d="M2 3h12v1.5H2V3zm0 3.5h12V8H2V6.5zm0 3.5h8V11.5H2V10z" />
+					</svg>
+				</Link>
+				<Link
+					to="/settings"
+					className={`flex h-8 w-8 items-center justify-center rounded-md ${
+						isSettings ? "bg-sidebar-selected text-sidebar-ink" : "text-sidebar-inkDull hover:bg-sidebar-selected/50"
+					}`}
+					title="Settings"
+				>
+					<svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
+						<path d="M6.5 1h3l.4 2.1c.3.1.6.3.9.5L12.9 3l1.5 2.6-1.7 1.4c0 .3.1.7.1 1s0 .7-.1 1l1.7 1.4-1.5 2.6-2.1-.7c-.3.2-.6.4-.9.5L9.5 15h-3l-.4-2.1c-.3-.1-.6-.3-.9-.5L3.1 13l-1.5-2.6 1.7-1.4c0-.3-.1-.7-.1-1s0-.7.1-1L1.6 5.6 3.1 3l2.1.7c.3-.2.6-.4.9-.5L6.5 1zM8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z" />
+					</svg>
+				</Link>
+				<div className="my-1 h-px w-5 bg-sidebar-line" />
 					{agents.map((agent) => {
 						const isActive = matchRoute({ to: "/agents/$agentId", params: { agentId: agent.id }, fuzzy: true });
 						return (
@@ -130,14 +142,24 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 						>
 							Dashboard
 						</Link>
-						<Link
-							to="/logs"
-							className="mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-inkDull hover:bg-sidebar-selected/50 [&.active]:bg-sidebar-selected [&.active]:text-sidebar-ink"
-							activeProps={{ className: "active" }}
-						>
-							Logs
-						</Link>
-					</div>
+					<Link
+						to="/logs"
+						className="mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-inkDull hover:bg-sidebar-selected/50 [&.active]:bg-sidebar-selected [&.active]:text-sidebar-ink"
+						activeProps={{ className: "active" }}
+					>
+						Logs
+					</Link>
+					<Link
+						to="/settings"
+						className={`mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+							isSettings
+								? "bg-sidebar-selected text-sidebar-ink"
+								: "text-sidebar-inkDull hover:bg-sidebar-selected/50"
+						}`}
+					>
+						Settings
+					</Link>
+				</div>
 
 					{/* Agents */}
 					<div className="flex flex-1 flex-col overflow-y-auto pt-3">

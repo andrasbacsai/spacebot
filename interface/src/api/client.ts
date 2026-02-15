@@ -565,6 +565,22 @@ export interface CronExecutionsParams {
 	limit?: number;
 }
 
+export interface ProviderStatus {
+	anthropic: boolean;
+	openai: boolean;
+	openrouter: boolean;
+}
+
+export interface ProvidersResponse {
+	providers: ProviderStatus;
+	has_any: boolean;
+}
+
+export interface ProviderActionResponse {
+	success: boolean;
+	message: string;
+}
+
 export const api = {
 	status: () => fetchJson<StatusResponse>("/status"),
 	overview: () => fetchJson<InstanceOverviewResponse>("/overview"),
@@ -710,6 +726,29 @@ export const api = {
 			throw new Error(`API error: ${response.status}`);
 		}
 		return response.json() as Promise<{ success: boolean; message: string }>;
+	},
+
+	// Provider management
+	providers: () => fetchJson<ProvidersResponse>("/providers"),
+	updateProvider: async (provider: string, apiKey: string) => {
+		const response = await fetch(`${API_BASE}/providers`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ provider, api_key: apiKey }),
+		});
+		if (!response.ok) {
+			throw new Error(`API error: ${response.status}`);
+		}
+		return response.json() as Promise<ProviderActionResponse>;
+	},
+	removeProvider: async (provider: string) => {
+		const response = await fetch(`${API_BASE}/providers/${encodeURIComponent(provider)}`, {
+			method: "DELETE",
+		});
+		if (!response.ok) {
+			throw new Error(`API error: ${response.status}`);
+		}
+		return response.json() as Promise<ProviderActionResponse>;
 	},
 
 	eventsUrl: `${API_BASE}/events`,

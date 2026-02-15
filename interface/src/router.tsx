@@ -6,6 +6,7 @@ import {
 	Outlet,
 } from "@tanstack/react-router";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { SetupBanner } from "@/components/SetupBanner";
 import { Sidebar } from "@/components/Sidebar";
 import { Overview } from "@/routes/Overview";
 import { AgentDetail } from "@/routes/AgentDetail";
@@ -15,6 +16,7 @@ import { ChannelDetail } from "@/routes/ChannelDetail";
 import { AgentMemories } from "@/routes/AgentMemories";
 import { AgentConfig } from "@/routes/AgentConfig";
 import { AgentCron } from "@/routes/AgentCron";
+import { Settings } from "@/routes/Settings";
 import { useLiveContext } from "@/hooks/useLiveContext";
 import { AgentTabs } from "@/components/AgentTabs";
 
@@ -31,6 +33,7 @@ function RootLayout() {
 			/>
 			<div className="flex flex-1 flex-col overflow-hidden">
 				<ConnectionBanner state={connectionState} />
+				<SetupBanner />
 				<div className="flex-1 overflow-hidden">
 					<Outlet />
 				</div>
@@ -60,6 +63,14 @@ const indexRoute = createRoute({
 	component: function IndexPage() {
 		const { liveStates } = useLiveContext();
 		return <Overview liveStates={liveStates} />;
+	},
+});
+
+const settingsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/settings",
+	component: function SettingsPage() {
+		return <Settings />;
 	},
 });
 
@@ -220,6 +231,7 @@ const channelRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
 	indexRoute,
+	settingsRoute,
 	logsRoute,
 	agentRoute,
 	agentChannelsRoute,
