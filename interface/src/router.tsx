@@ -16,6 +16,7 @@ import { ChannelDetail } from "@/routes/ChannelDetail";
 import { AgentMemories } from "@/routes/AgentMemories";
 import { AgentConfig } from "@/routes/AgentConfig";
 import { AgentCron } from "@/routes/AgentCron";
+import { AgentIngest } from "@/routes/AgentIngest";
 import { Settings } from "@/routes/Settings";
 import { useLiveContext } from "@/hooks/useLiveContext";
 import { AgentTabs } from "@/components/AgentTabs";
@@ -141,6 +142,22 @@ const agentMemoriesRoute = createRoute({
 	},
 });
 
+const agentIngestRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/agents/$agentId/ingest",
+	component: function AgentIngestPage() {
+		const { agentId } = agentIngestRoute.useParams();
+		return (
+			<div className="flex h-full flex-col">
+				<AgentHeader agentId={agentId} />
+				<div className="flex-1 overflow-hidden">
+					<AgentIngest agentId={agentId} />
+				</div>
+			</div>
+		);
+	},
+});
+
 const agentWorkersRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/agents/$agentId/workers",
@@ -236,6 +253,7 @@ const routeTree = rootRoute.addChildren([
 	agentRoute,
 	agentChannelsRoute,
 	agentMemoriesRoute,
+	agentIngestRoute,
 	agentWorkersRoute,
 	agentCortexRoute,
 	agentCronRoute,

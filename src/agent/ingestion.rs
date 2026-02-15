@@ -141,7 +141,7 @@ fn is_text_file(path: &Path) -> bool {
 
 /// SHA-256 hex digest of file content, used as a stable identifier for
 /// progress tracking across restarts.
-fn content_hash(content: &str) -> String {
+pub fn content_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     format!("{:x}", hasher.finalize())
@@ -174,11 +174,15 @@ async fn process_file(
     }
 
     let hash = content_hash(&content);
+    let file_size = content.len() as i64;
     let chunks = chunk_text(&content, config.chunk_size);
     let total_chunks = chunks.len();
 
     let completed = load_completed_chunks(&deps.sqlite_pool, &hash).await?;
     let remaining = total_chunks - completed.len();
+
+    // Record file-level tracking (idempotent — skips if already exists from a previous run)
+    upsert_ingestion_file(&deps.sqlite_pool, &hash, filename, file_size, total_chunks as i64).await?;
 
     if !completed.is_empty() {
         tracing::info!(
@@ -196,6 +200,8 @@ async fn process_file(
             "chunked file for ingestion"
         );
     }
+
+    let mut had_failure = false;
 
     for (index, chunk) in chunks.iter().enumerate() {
         let chunk_number = index + 1;
@@ -234,19 +240,23 @@ async fn process_file(
                     %error,
                     "failed to process chunk"
                 );
-                // Continue with remaining chunks rather than aborting the whole file
+                had_failure = true;
             }
         }
     }
 
-    // Clean up progress records and delete the file
+    // Mark file as completed (or failed if any chunk errored)
+    let final_status = if had_failure { "failed" } else { "completed" };
+    complete_ingestion_file(&deps.sqlite_pool, &hash, final_status).await?;
+
+    // Clean up chunk-level progress records
     delete_progress(&deps.sqlite_pool, &hash).await?;
 
     tokio::fs::remove_file(path)
         .await
         .with_context(|| format!("failed to delete ingested file: {}", path.display()))?;
 
-    tracing::info!(file = %filename, chunks = total_chunks, "file ingestion complete, file deleted");
+    tracing::info!(file = %filename, chunks = total_chunks, status = final_status, "file ingestion complete, file deleted");
 
     Ok(())
 }
@@ -301,6 +311,52 @@ async fn delete_progress(pool: &SqlitePool, hash: &str) -> anyhow::Result<()> {
         .execute(pool)
         .await
         .context("failed to clean up ingestion progress")?;
+
+    Ok(())
+}
+
+// -- File-level tracking queries ------------------------------------------------
+
+/// Insert a file record when ingestion starts. Uses INSERT OR IGNORE so
+/// re-processing the same file after a restart is a no-op.
+async fn upsert_ingestion_file(
+    pool: &SqlitePool,
+    hash: &str,
+    filename: &str,
+    file_size: i64,
+    total_chunks: i64,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO ingestion_files (content_hash, filename, file_size, total_chunks, status)
+        VALUES (?, ?, ?, ?, 'processing')
+        "#,
+    )
+    .bind(hash)
+    .bind(filename)
+    .bind(file_size)
+    .bind(total_chunks)
+    .execute(pool)
+    .await
+    .context("failed to insert ingestion file record")?;
+
+    Ok(())
+}
+
+/// Mark a file as completed or failed.
+async fn complete_ingestion_file(
+    pool: &SqlitePool,
+    hash: &str,
+    status: &str,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE ingestion_files SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE content_hash = ?",
+    )
+    .bind(status)
+    .bind(hash)
+    .execute(pool)
+    .await
+    .context("failed to update ingestion file status")?;
 
     Ok(())
 }

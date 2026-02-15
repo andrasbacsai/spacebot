@@ -621,6 +621,31 @@ export interface ProviderActionResponse {
 	message: string;
 }
 
+// -- Ingest Types --
+
+export interface IngestFileInfo {
+	content_hash: string;
+	filename: string;
+	file_size: number;
+	total_chunks: number;
+	chunks_completed: number;
+	status: "processing" | "completed" | "failed";
+	started_at: string;
+	completed_at: string | null;
+}
+
+export interface IngestFilesResponse {
+	files: IngestFileInfo[];
+}
+
+export interface IngestUploadResponse {
+	uploaded: string[];
+}
+
+export interface IngestDeleteResponse {
+	success: boolean;
+}
+
 export const api = {
 	status: () => fetchJson<StatusResponse>("/status"),
 	overview: () => fetchJson<InstanceOverviewResponse>("/overview"),
@@ -803,6 +828,36 @@ export const api = {
 			throw new Error(`API error: ${response.status}`);
 		}
 		return response.json() as Promise<ProviderActionResponse>;
+	},
+
+	// Ingest API
+	ingestFiles: (agentId: string) =>
+		fetchJson<IngestFilesResponse>(`/agents/ingest/files?agent_id=${encodeURIComponent(agentId)}`),
+
+	uploadIngestFiles: async (agentId: string, files: File[]) => {
+		const formData = new FormData();
+		for (const file of files) {
+			formData.append("files", file);
+		}
+		const response = await fetch(
+			`${API_BASE}/agents/ingest/upload?agent_id=${encodeURIComponent(agentId)}`,
+			{ method: "POST", body: formData },
+		);
+		if (!response.ok) {
+			throw new Error(`API error: ${response.status}`);
+		}
+		return response.json() as Promise<IngestUploadResponse>;
+	},
+
+	deleteIngestFile: async (agentId: string, contentHash: string) => {
+		const params = new URLSearchParams({ agent_id: agentId, content_hash: contentHash });
+		const response = await fetch(`${API_BASE}/agents/ingest/files?${params}`, {
+			method: "DELETE",
+		});
+		if (!response.ok) {
+			throw new Error(`API error: ${response.status}`);
+		}
+		return response.json() as Promise<IngestDeleteResponse>;
 	},
 
 	eventsUrl: `${API_BASE}/events`,
